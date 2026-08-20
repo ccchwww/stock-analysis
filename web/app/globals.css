@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Fixed dark dashboard palette — intentionally not tied to prefers-color-scheme. */
+:root {
+  --background: #0a0e14;
+  --foreground: #e4e7eb;
+  --surface: #11161d;
+  --border: #232b38;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

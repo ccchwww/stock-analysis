@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "trading_days_per_year": 252,
+    "risk_free_rate_annual": 0.0275,
+    "risk_free_rate_note": "Approximate Government of Canada 3-month T-bill annual yield, set manually as an illustrative constant (backtest/config.py), not a live feed -- check bankofcanada.ca/rates/interest-rates for the current value.",
+    "var_confidence": 0.95,
+    "var_method": "Historical (empirical percentile of actual daily returns), 1-day horizon. Says nothing about how severe losses beyond the threshold could be -- Expected Shortfall (a.k.a. Conditional VaR), shown alongside VaR everywhere it appears below, is the companion metric that covers exactly that: the average loss on the worst days, not just where the worst days begin."
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "var_window_days": 250,
+    "confidence_levels": [
+      0.95,
+      0.99
+    ],
+    "z_scores": {
+      "0.95": -1.645,
+      "0.99": -2.326
+    },
+    "chi2_critical_95": {
+      "df1": 3.841,
+      "df2": 5.991
+    },
+    "basel_zones": [
+      {
+        "zone": "green",
+        "max_exceptions": 4
+      },
+      {
+        "zone": "yellow",
+        "max_exceptions": 9
+      },
+      {
+        "zone": "red",
+        "max_exceptions": null
+      }
+    ],
+    "methodology_note": "Rolling 250-trading-day window, strictly out-of-sample: VaR for day t uses only returns from [t-250, t-1], never day t itself. Historical VaR re-applies the exact same empirical tail-cutoff formula shown on the Risk Dashboard, just over each trailing window instead of the whole selected period. Parametric (normal / variance-covariance) VaR uses the same window's mean and standard deviation with a standard-normal z-score.",
+    "warmup_note": "Backtesting from a chosen start date requires 250+ trading days of history before it, fetched automatically -- the start-date control on this tab will not let you pick a date without a full warmup period, rather than silently running on a shorter sample.",
+    "basel_note": "Basel traffic-light zones (green 0-4, yellow 5-9, red 10+ exceptions) are defined for 99% VaR over 250 observations. The 95% series is shown for calibration testing only and is not evaluated against Basel zones -- at 95%, roughly 12.5 exceptions per 250 days is the EXPECTED result for a well-calibrated model, so applying these zones there would flag a correct model as red.",
+    "fat_tail_note": "If parametric VaR is breached more often than its nominal level -- especially at 99% -- that is the expected finding: equity returns have fatter tails than a normal distribution assumes. This is the empirical motivation for volatility models (e.g. GARCH) that let the variance itself change over time, rather than assuming one constant normal distribution."
+  },
+  "stress": {
+    "windows": [
+      {
+        "key": "gfc_2008",
+        "label": "2008 Financial Crisis",
+        "start": "2008-06-18",
+        "end": "2009-03-09",
+        "lookback_start": "2005-06-18"
+      },
+      {
+        "key": "oil_crash",
+        "label": "Oil Price Crash",
+        "start": "2014-06-20",
+        "end": "2016-01-20",
+        "lookback_start": "2011-06-20"
+      },
+      {
+        "key": "covid_crash",
+        "label": "COVID-19 Crash",
+        "start": "2020-02-19",
+        "end": "2020-03-23",
+        "lookback_start": "2017-02-19"
+      },
+      {
+        "key": "rate_hikes_2022",
+        "label": "2022 Rate-Hike Selloff",
+        "start": "2022-01-04",
+        "end": "2022-10-14",
+        "lookback_start": "2019-01-04"
+      }
+    ],
+    "lookback_years": 3,
+    "min_coverage_fraction": 0.9,
+    "fixed_window_note": "These 4 windows use FIXED historical dates and are completely independent of the start-date control above -- changing the start date affects the VaR backtest only, never this section.",
+    "lookahead_note": "The minimum-variance and maximum-Sharpe portfolios shown per window are estimated using ONLY the 3 years of data immediately BEFORE each window opens, then held fixed (no rebalancing) through the window itself. If fewer than 2 of the selected stocks have sufficient data in that lookback period, the optimized portfolios are reported as unavailable for that window rather than silently falling back to a look-ahead-contaminated, in-sample estimate.",
+    "survivorship_note": "Many of today's TSX 60 constituents did not exist, or were not yet listed, during the earlier windows (2008 especially) -- survivorship bias is materially worse here than elsewhere on this site, since today's constituent list is being projected onto history it didn't live through. Per-window ticker coverage is reported explicitly rather than silently excluding names with insufficient data.",
+    "correlation_baseline_note": "Baseline correlation is the average pairwise correlation of daily returns over the FULL downloaded sample, EXCLUDING all 4 stress windows above (not a specific calm sub-period) -- compared against the average pairwise correlation during each window alone. Diversification benefits are calibrated on the baseline (calm-period) correlations, and shrink exactly when they're most needed if correlations rise during the crisis, which mean-variance optimization -- itself calibrated on calm-period data via the same lookback -- has no way to see coming."
+  }
+}
