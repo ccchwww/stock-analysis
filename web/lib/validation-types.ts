@@ -11,6 +11,7 @@ export type ValidationMeta = {
   methodology_note: string;
   warmup_note: string;
   basel_note: string;
+  basel_scaling_note: string;
   fat_tail_note: string;
 };
 

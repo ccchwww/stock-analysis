@@ -6,17 +6,15 @@ import type { MarketDataMeta, StockReturns } from "@/lib/market-data-types";
 import type { StressDataMeta, StressStockReturns, StressBenchmarkReturns } from "@/lib/stress-data-types";
 import type { RiskMeta } from "@/lib/risk-types";
 import StockMultiSelect, { type SelectableStock } from "@/components/shared/StockMultiSelect";
+import StockPresetButtons from "@/components/shared/StockPresetButtons";
 import PortfolioToggle from "@/components/shared/PortfolioToggle";
 import StartDateControl from "@/components/shared/StartDateControl";
+import { defaultSelection } from "@/lib/stock-presets";
 import { combineEqualWeight } from "@/lib/returns-math";
 import { tickerWithName } from "@/lib/ticker-label";
 import { earliestBacktestableDate, computeVarBacktest } from "@/lib/var-backtest";
 import VarBacktestSection from "./VarBacktestSection";
 import StressTestSection from "./StressTestSection";
-
-// Same defaults as the Risk Dashboard, for a consistent "what am I looking
-// at" feeling across tabs.
-const DEFAULT_TICKERS = ["RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO"];
 
 export default function ModelValidationDashboard({
   validationMeta,
@@ -58,10 +56,9 @@ export default function ModelValidationDashboard({
   );
 
   const [startDate, setStartDate] = useState(earliestStart);
-  const [selectedTickers, setSelectedTickers] = useState<string[]>(() => {
-    const defaults = DEFAULT_TICKERS.filter((t) => stocksRaw[t]);
-    return defaults.length >= 2 ? defaults : allStocks.slice(0, 5).map((s) => s.ticker);
-  });
+  const [selectedTickers, setSelectedTickers] = useState<string[]>(() =>
+    defaultSelection((t) => Boolean(stocksRaw[t]), allStocks.slice(0, 5).map((s) => s.ticker)),
+  );
   // Defaults to ON (unlike the other tabs, which default off) so this tab
   // shows a working backtest immediately on load instead of the "select a
   // stock or combine" prompt -- the primary chart here is meant to be the
@@ -135,6 +132,13 @@ export default function ModelValidationDashboard({
             hint={canCombine ? "equal-weight" : "select 2+ stocks"}
           />
           <StartDateControl value={startDate} min={earliestStart} max={marketMeta.date_range.end} onChange={setStartDate} />
+        </div>
+        <div className="mt-4 border-t border-border pt-4">
+          <StockPresetButtons
+            selected={selectedTickers}
+            onChange={handleTickersChange}
+            available={(t) => Boolean(stocksRaw[t])}
+          />
         </div>
         <p className="mt-3 text-xs text-zinc-500">
           Earliest selectable start date is {earliestStart} — {validationMeta.var_window_days} trading days

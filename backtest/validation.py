@@ -53,10 +53,12 @@ MARKET_DATA_PATH = REPO_ROOT / "web" / "public" / "market_data.json"
 STRESS_DATA_PATH = REPO_ROOT / "web" / "public" / "stress_data.json"
 
 # Console sanity-check for the stress-test section uses this fixed selection
-# -- the same default the frontend starts with -- rather than the full
+# -- the same default the frontend starts with (see
+# web/lib/stock-presets.ts's SECTOR_DIVERSE_PRESET) -- rather than the full
 # universe, since the whole point of the section is per-stock behavior, not
-# a blended aggregate.
-STRESS_REFERENCE_TICKERS = ["RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO"]
+# a blended aggregate. Five distinct sectors, all with price history back to
+# the 1990s so the 2008 window's 3-year lookback is fully covered.
+STRESS_REFERENCE_TICKERS = ["RY.TO", "ENB.TO", "CNR.TO", "BCE.TO", "ABX.TO"]
 
 # Day t's VaR uses ONLY returns[t-250 .. t-1] -- see rolling_historical_var /
 # rolling_parametric_var below, which never index t itself.
@@ -204,13 +206,40 @@ def skew_kurtosis(clean):
     return m3 / (m2**1.5), m4 / (m2**2) - 3
 
 
-def basel_zone(scaled_exceptions):
-    rounded = round(scaled_exceptions)
-    if rounded <= 4:
+def basel_zone(exception_count):
+    """Classifies a RAW exception count over one 250-observation window --
+    green 0-4, yellow 5-9, red 10+. Must be applied to an ACTUAL 250-obs
+    window, never a long-run average rescaled to a 250-day equivalent (see
+    module docstring / task history: rescaling smooths clustering away)."""
+    if exception_count <= 4:
         return "green"
-    if rounded <= 9:
+    if exception_count <= 9:
         return "yellow"
     return "red"
+
+
+def rolling_basel_windows(dates, exceptions_seq, window=VAR_WINDOW_DAYS):
+    """One window per evaluable observation once `window` of them exist --
+    windows[i] covers exceptions_seq[i-window+1 .. i] inclusive. Mirrors
+    rollingBaselWindows in web/lib/var-backtest.ts exactly."""
+    out = []
+    count = 0
+    for i in range(len(exceptions_seq)):
+        if exceptions_seq[i]:
+            count += 1
+        if i >= window and exceptions_seq[i - window]:
+            count -= 1
+        if i >= window - 1:
+            out.append(
+                {
+                    "n": window,
+                    "exceptions": count,
+                    "zone": basel_zone(count),
+                    "start_date": dates[i - window + 1],
+                    "end_date": dates[i],
+                }
+            )
+    return out
 
 
 # --- Stress testing (Part 2) -- independent reference check ----------------
@@ -427,11 +456,13 @@ def run_reference_backtest(returns, dates, label):
         for confidence in CONFIDENCE_LEVELS:
             series = series_by_key[(method, confidence)]
             exceptions_seq = []
+            eval_dates = []
             for i in range(n_total):
                 actual, var_value = returns[i], series[i]
                 if var_value is None or (isinstance(actual, float) and math.isnan(actual)):
                     continue
                 exceptions_seq.append(bool(actual < -var_value))
+                eval_dates.append(dates[i])
             n = len(exceptions_seq)
             x = sum(exceptions_seq)
             nominal_p = 1 - confidence
@@ -449,6 +480,8 @@ def run_reference_backtest(returns, dates, label):
                 "kupiec": kupiec,
                 "christoffersen": christoffersen,
                 "conditional_coverage": cc,
+                "eval_dates": eval_dates,
+                "exceptions_seq": exceptions_seq,
             }
             print(
                 f"{method:<12}{confidence:>6.2f}{n:>7}{x:>12}{expected:>10.1f}{rate * 100:>8.2f}%   "
@@ -456,11 +489,29 @@ def run_reference_backtest(returns, dates, label):
             )
 
     h99 = results["historical_0.99"]
-    scaled = h99["exceptions"] * (VAR_WINDOW_DAYS / h99["n"]) if h99["n"] > 0 else 0.0
-    zone = basel_zone(scaled)
-    print(f"\nBasel traffic light (99% historical VaR, scaled to {VAR_WINDOW_DAYS} obs): "
-          f"{scaled:.2f} exceptions -> {zone.upper()}")
-    print("(Basel zones apply ONLY to 99% VaR over 250 observations -- never evaluated at 95%.)")
+    windows = rolling_basel_windows(h99["eval_dates"], h99["exceptions_seq"])
+    if windows:
+        trailing = windows[-1]
+        worst = max(windows, key=lambda w: w["exceptions"])
+    else:
+        trailing = worst = {
+            "n": h99["n"],
+            "exceptions": h99["exceptions"],
+            "zone": basel_zone(h99["exceptions"]),
+            "start_date": h99["eval_dates"][0] if h99["eval_dates"] else None,
+            "end_date": h99["eval_dates"][-1] if h99["eval_dates"] else None,
+        }
+    print(f"\nBasel traffic light (99% historical VaR, trailing {VAR_WINDOW_DAYS}-observation window "
+          f"{trailing['start_date']} to {trailing['end_date']}): "
+          f"{trailing['exceptions']} exceptions -> {trailing['zone'].upper()}")
+    print(f"Worst {VAR_WINDOW_DAYS}-observation window in the backtest ({worst['start_date']} to "
+          f"{worst['end_date']}): {worst['exceptions']} exceptions -> {worst['zone'].upper()}")
+    if trailing["zone"] != worst["zone"]:
+        print(f"NOTE: trailing and worst-window zones DIFFER ({trailing['zone'].upper()} vs "
+              f"{worst['zone'].upper()}) -- clustering of exceptions changes the verdict depending on "
+              f"which window is evaluated.")
+    print("(Basel zones apply ONLY to 99% VaR over 250 observations -- never evaluated at 95%. Raw "
+          "counts over an actual 250-observation window, never a long-run average rescaled to 250 days.)")
 
     p95 = results["parametric_0.95"]["exception_rate"]
     h95 = results["historical_0.95"]["exception_rate"]
@@ -542,6 +593,18 @@ def main():
                 "evaluated against Basel zones -- at 95%, roughly 12.5 exceptions "
                 "per 250 days is the EXPECTED result for a well-calibrated model, "
                 "so applying these zones there would flag a correct model as red."
+            ),
+            "basel_scaling_note": (
+                "An earlier version of this page rescaled the total exception "
+                "count over the whole backtest down to a 250-day equivalent (e.g. "
+                "10 exceptions in 1005 days -> 2.5), which understated clustering "
+                "risk -- averaging over a long window smooths away exactly the "
+                "clustering the Christoffersen test above is checking for. The "
+                "current implementation classifies the actual trailing "
+                "250-observation window, and separately reports the worst "
+                "250-observation window anywhere in the backtest, so a rescaled "
+                "average can no longer show Green while a real 250-day window "
+                "sits in Yellow or Red."
             ),
             "fat_tail_note": (
                 "If parametric VaR is breached more often than its nominal level "

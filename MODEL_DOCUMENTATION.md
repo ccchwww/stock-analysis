@@ -422,10 +422,40 @@ statistical power over a ~4-year sample, not evidence the model is fine.
 
 ### 5.4 Basel traffic light
 
-99% historical VaR, scaled to a 250-observation-equivalent: **1.99
-exceptions → GREEN.** Consistent with §5.1's Kupiec pass at 99%.
+Evaluated on **actual 250-observation windows**, raw counts, never a
+rescaled long-run average (see the correction note below). 99% historical
+VaR, full-universe equal-weight portfolio:
 
-### 5.5 Stress test — the default 5-bank selection (RY/TD/BNS/BMO/CM)
+| Window | Dates | Exceptions | Zone |
+|---|---|---|---|
+| Trailing 250 observations | 2025-08-14 → 2026-08-12 | 0 | **GREEN** |
+| Worst rolling 250-obs window | 2024-04-15 → 2025-04-10 | 4 | **GREEN** |
+
+Both land in green here, consistent with §5.1's Kupiec pass at 99%. The two
+figures are reported separately because they can and do diverge for other
+selections — the default sector-diverse selection shown in the UI, for
+instance, produces a green trailing window alongside a **yellow** worst
+window. That divergence *is* the §5.2 clustering finding made visible, and
+the page now states it explicitly when the zones differ.
+
+**Correction (2026-09-20).** An earlier version of this section, and of the
+on-page traffic light, scaled the total exception count over the whole
+backtest down to a 250-day equivalent (e.g. 10 exceptions in 1005 days →
+2.5 → GREEN). That was **wrong**: the Basel traffic-light test evaluates the
+exception count in the most recent 250 observations, not a long-run average.
+Averaging over ~1005 days deliberately smooths away clustering — precisely
+the property §5.2's Christoffersen test *rejects* on this same data — so the
+old display could show GREEN while a real 250-day window sat in YELLOW or
+RED. Both the TypeScript implementation and the Python reference check now
+use actual 250-observation windows, and additionally report the worst such
+window anywhere in the backtest.
+
+### 5.5 Stress test — the Big 5 Banks preset (RY/TD/BNS/BMO/CM)
+
+> **Note (2026-09-20):** this selection is no longer the site default. It
+> remains available as the one-click **"Big 5 Banks (concentration demo)"**
+> preset, and the numbers below still describe it. See §5.6 for the new
+> sector-diverse default.
 
 Baseline pairwise correlation (full sample excluding all 4 crisis windows):
 **0.739.**
@@ -450,6 +480,37 @@ underperforming in 2 of 4 crises, including a −45.7% vs. −25.9% gap in the
 `SHOP.TO` based on its pre-window (2019–2022) history, shortly before it
 fell 79% over the window itself.
 
+### 5.6 Stress test — the sector-diverse default (RY/ENB/CNR/BCE/ABX)
+
+The site default as of 2026-09-20: `RY.TO` (financials), `ENB.TO` (energy),
+`CNR.TO` (rail/industrials), `BCE.TO` (telecom), `ABX.TO` (materials). The
+previous all-banks default averaged **0.739** baseline pairwise correlation,
+which left the efficient frontier, correlation heatmap, and diversification
+sections looking degenerate on first load — there was essentially nothing to
+diversify. This selection averages **0.222**.
+
+All five have yfinance history back to 1995–1996 (`RY`/`ENB`/`ABX`
+1995-01-12, `BCE` 1996-05-06, `CNR` 1996-11-22) and **100% coverage of every
+stress window and every pre-window lookback**, including the 2008 window's
+3-year lookback from 2005-06-18 — the binding constraint that rules out
+recently-listed TSX 60 names such as `SHOP.TO`.
+
+| Window | Baseline → Stress correlation | Equal-weight return | Benchmark return |
+|---|---|---|---|
+| 2008 GFC | 0.222 → 0.312 (+0.090) | −17.6% | −49.8% |
+| Oil Crash | 0.222 → 0.254 (+0.032) | −5.9% | −21.6% |
+| COVID Crash | 0.222 → 0.590 (+0.368) | −24.6% | −37.1% |
+| 2022 Rate Hikes | 0.222 → 0.297 (+0.075) | −4.6% | −13.6% |
+
+**Correlation rose in all four crises here too** — and proportionally much
+harder than for the banks (COVID: +0.368, versus +0.198 for the already-high
+bank baseline). The "diversification shrinks when you need it" finding is
+therefore *more* visible with a genuinely diversified selection, not less:
+a portfolio averaging 0.22 correlation in calm periods behaved like a 0.59
+one during the COVID crash. Max-Sharpe and min-variance figures for this
+selection are computed client-side (see §2.5) and are not reproduced here,
+since the Python reference check does not re-implement the optimizer.
+
 ---
 
 ## 6. Known deficiencies and planned remediation
@@ -460,6 +521,7 @@ fell 79% over the window itself.
 | Single-factor CAPM (Beta/Alpha) | Attributes all systematic risk to one market factor; ignores size, value, momentum, sector effects that are well-documented in the literature | A multi-factor model (Fama-French-style, adapted to Canadian factor data) would decompose alpha more credibly |
 | Christoffersen failure in every VaR series (§5.2) | The current rolling-window approach doesn't adapt fast enough to volatility regime changes, causing exception clustering | Same GARCH remediation above; alternatively, a shorter rolling window trades this off against noisier day-to-day estimates (an explicit tradeoff, not a free fix) |
 | Point-in-time index membership | Survivorship bias throughout (§4) | Would require a licensed, point-in-time constituents dataset — yfinance has no such feature; out of scope for a project built entirely on free data |
+| **Survivorship bias inflates the 12-Month Momentum result specifically** | This is where the bias does the most damage, and it is *not* symmetric across strategies. 12-Month Momentum returns **+192.0%** vs Buy & Hold's **+145.0%** — a **+47.0 pt** headline gap. But the universe is *today's* S&P/TSX 60 constituents applied backwards over 2021–2026, so names dropped from the index are absent entirely. A strategy that ranks and buys past winners is therefore selecting from a pool already filtered for survival, which inflates momentum **more than it inflates Buy & Hold**. Buy & Hold holds the same filtered universe and is biased too, but it does not additionally *select* within it — so the +47.0 pt **gap** is overstated by more than either figure alone, and should not be read as a reliable estimate of edge. The same caveat applies in kind to the other rank-and-select strategies (1-Day Momentum, Mean Reversion), though both lost to the benchmark here so the bias flatters a result that is negative anyway. | **Honestly: this cannot be quantified with the data this project has.** Correcting it requires point-in-time index constituent data — the historical membership of the S&P/TSX 60 at each rebalance date — so that names are in the universe only for the dates they actually belonged to it. yfinance does not provide this, and no free source does; it is a licensed dataset. Until then the magnitude of the overstatement is **unknown, not merely unmeasured**, and the result is reported with the caveat attached directly to the headline (Strategies tab) rather than only in a general limitations footer. |
 | No transaction-cost model on Efficient-Frontier rebalancing | The optimized portfolios in stress testing assume free rebalancing into the estimated weights | Apply the same `COST_BPS` turnover model already used for the four trading strategies |
 | Mean-variance input sensitivity (§2.3) | Small changes to estimated mean returns can produce extreme, unstable weights — demonstrated, not just asserted, in §5.5 | Shrinkage estimators (e.g. Ledoit-Wolf covariance shrinkage), additional weight constraints, or a Black-Litterman blend of historical data with independent views |
 | No CI/automated data regeneration | Every JSON file is regenerated by manually running Python scripts; nothing currently re-runs on a schedule | A scheduled CI job (e.g. nightly) re-running `market_data.py` → `momentum_backtest.py` → `risk_dashboard.py` → `stress_data.py` (rarely, since its window is fixed) → `validation.py`, then redeploying, would keep the "Data as of" stamp meaningfully current without a manual step |
@@ -470,6 +532,16 @@ fell 79% over the window itself.
 
 ## 7. Change log
 
+- **2026-09-20** — Three corrections. (1) **Basel traffic light fixed
+  (§5.4):** was rescaling a long-run average to a 250-day equivalent, which
+  understated clustering risk; now evaluates actual 250-observation windows
+  and additionally reports the worst rolling window, flagging the case where
+  the two zones disagree. (2) **Default stock selection changed (§5.6):**
+  from five Canadian banks (0.739 avg pairwise correlation) to five distinct
+  sectors (0.222); the banks remain as an explicitly-labelled concentration
+  demo preset. (3) **Survivorship caveat surfaced (§6):** the 12-Month
+  Momentum outperformance is now caveated adjacent to the headline on the
+  Strategies tab, not only in the general limitations section.
 - **2026-08-12** — Part 3: this document created; on-site Assumptions &
   Limitations page and data-provenance stamp added; README rewritten.
 - **Model Validation Part 2** — historical stress testing added (four fixed

@@ -21,6 +21,10 @@ export default function ValidationAssumptions({ meta }: { meta: ValidationMeta }
         </li>
         <li className="flex gap-2">
           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+          <span>{meta.basel_scaling_note}</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
           <span>{meta.fat_tail_note}</span>
         </li>
         <li className="flex gap-2">

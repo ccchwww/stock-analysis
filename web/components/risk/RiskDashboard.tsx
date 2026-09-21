@@ -4,8 +4,10 @@ import { useMemo, useState } from "react";
 import type { RiskMeta } from "@/lib/risk-types";
 import type { BenchmarkReturns, MarketDataMeta, StockReturns } from "@/lib/market-data-types";
 import StockMultiSelect, { type SelectableStock } from "@/components/shared/StockMultiSelect";
+import StockPresetButtons from "@/components/shared/StockPresetButtons";
 import PortfolioToggle from "@/components/shared/PortfolioToggle";
 import StartDateControl from "@/components/shared/StartDateControl";
+import { defaultSelection } from "@/lib/stock-presets";
 import {
   combineEqualWeight,
   annualizedVolatility,
@@ -27,10 +29,6 @@ import MonteCarloSection from "./MonteCarloSection";
 import RollingMetricsSection, { type RollingTarget } from "./RollingMetricsSection";
 import EfficientFrontierSection from "./EfficientFrontierSection";
 import { computeEfficientFrontier } from "@/lib/efficient-frontier";
-
-// Illustrates the "less diversified than it looks" lesson out of the box:
-// the Big 5 Canadian banks are usually highly correlated with each other.
-const DEFAULT_TICKERS = ["RY.TO", "TD.TO", "BNS.TO", "BMO.TO", "CM.TO"];
 
 // Distinct from every ticker's hashed hue (see stock-colors.ts's
 // RESERVED_HUES) so the blended portfolio line always stands out -- same
@@ -62,10 +60,9 @@ export default function RiskDashboard({
   );
 
   const [startDate, setStartDate] = useState(marketMeta.date_range.start);
-  const [selectedTickers, setSelectedTickers] = useState<string[]>(() => {
-    const defaults = DEFAULT_TICKERS.filter((t) => stocksRaw[t]);
-    return defaults.length >= 2 ? defaults : allStocks.slice(0, 5).map((s) => s.ticker);
-  });
+  const [selectedTickers, setSelectedTickers] = useState<string[]>(() =>
+    defaultSelection((t) => Boolean(stocksRaw[t]), allStocks.slice(0, 5).map((s) => s.ticker)),
+  );
   const [combine, setCombine] = useState(false);
 
   const canCombine = selectedTickers.length >= 2;
@@ -223,6 +220,13 @@ export default function RiskDashboard({
             min={marketMeta.date_range.start}
             max={marketMeta.date_range.end}
             onChange={setStartDate}
+          />
+        </div>
+        <div className="mt-4 border-t border-border pt-4">
+          <StockPresetButtons
+            selected={selectedTickers}
+            onChange={handleTickersChange}
+            available={(t) => Boolean(stocksRaw[t])}
           />
         </div>
       </div>

@@ -18,6 +18,22 @@ export type Verdict = {
 
 const BENCHMARK_ID = "buy_hold";
 
+// Strategies that RANK the universe and buy a subset of it. These are the
+// ones survivorship bias inflates most: the universe is today's S&P/TSX 60
+// applied backwards, so names dropped from the index are absent entirely,
+// and a strategy that picks past winners is choosing from a pool already
+// filtered for survival. Buy & Hold holds that same filtered universe, so
+// it's biased too -- but a selection strategy compounds the bias, which is
+// exactly why the OUTPERFORMANCE GAP (not just the level) is overstated.
+// 12-month momentum is the most affected: ranking on a full year of prior
+// return is the closest thing here to selecting on "did this name do well
+// and still exist", which is what the survivorship filter guarantees.
+const SELECTION_STRATEGY_IDS = new Set(["momentum_1d", "momentum_12m", "mean_reversion"]);
+
+export function isSelectionStrategy(id: string): boolean {
+  return SELECTION_STRATEGY_IDS.has(id);
+}
+
 function fmtPct(fraction: number, digits = 1): string {
   return `${(fraction * 100).toFixed(digits)}%`;
 }

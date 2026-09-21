@@ -8,10 +8,11 @@ import { colorForTicker } from "@/lib/stock-colors";
 import { sliceFromDate } from "@/lib/date-range";
 import { computeDerivedStats, type DerivedStats } from "@/lib/derived-stats";
 import { combineEqualWeight } from "@/lib/returns-math";
-import { computeVerdict, getBestStrategy } from "@/lib/verdict";
+import { computeVerdict, getBestStrategy, isSelectionStrategy } from "@/lib/verdict";
 import { formatSignedPct, toneOf } from "@/lib/format";
 import StatCard from "@/components/shared/StatCard";
 import StockMultiSelect, { type SelectableStock } from "@/components/shared/StockMultiSelect";
+import StockPresetButtons from "@/components/shared/StockPresetButtons";
 import PortfolioToggle from "@/components/shared/PortfolioToggle";
 import StartDateControl from "@/components/shared/StartDateControl";
 import EquityChart, { type ChartSeries } from "./EquityChart";
@@ -196,6 +197,13 @@ export default function StrategyExplorer({
             onChange={setStartDate}
           />
         </div>
+        <div className="mt-4 border-t border-border pt-4">
+          <StockPresetButtons
+            selected={selectedTickers}
+            onChange={handleTickersChange}
+            available={(t) => Boolean(stocksRaw[t])}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -204,6 +212,11 @@ export default function StrategyExplorer({
           value={bestActive?.totalReturn != null ? formatSignedPct(bestActive.totalReturn, 1) : "n/a"}
           tone={bestActive?.totalReturn != null ? toneOf(bestActive.totalReturn) : "neutral"}
           caption={bestActive?.label ?? "insufficient data in window"}
+          explanation={
+            bestActive && isSelectionStrategy(bestActive.id)
+              ? "Overstated by an unknown amount: this strategy ranks and buys from today's TSX 60 list applied backwards, a universe already filtered for survival. See the survivorship caveat below."
+              : undefined
+          }
         />
         <StatCard
           label="Buy & Hold (Benchmark)"
@@ -220,6 +233,11 @@ export default function StrategyExplorer({
           value={edgeVsBenchmark != null ? formatSignedPct(edgeVsBenchmark, 1) : "n/a"}
           tone={edgeVsBenchmark != null ? toneOf(edgeVsBenchmark) : "neutral"}
           caption="percentage points, total return, net of costs"
+          explanation={
+            bestActive && isSelectionStrategy(bestActive.id)
+              ? "Not a reliable estimate of edge. Survivorship bias inflates a selection strategy more than it inflates Buy & Hold, so this gap is overstated by an unknown amount."
+              : undefined
+          }
         />
         <StatCard
           label="Strategies Tested"

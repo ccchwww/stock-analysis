@@ -317,14 +317,17 @@ function computeSkewKurtosis(clean: number[]): { skewness: number; excessKurtosi
 
 export type BaselZone = "green" | "yellow" | "red";
 
-// Basel zones are defined for 99% VaR over 250 observations ONLY -- at 95%,
-// ~12.5 exceptions per 250 days is the EXPECTED outcome for a well-calibrated
-// model, so applying these boundaries there would flag a correct model as
-// "red". Never call this for anything but the 99% historical series.
-export function baselZone(scaledExceptionCount: number): BaselZone {
-  const rounded = Math.round(scaledExceptionCount);
-  if (rounded <= 4) return "green";
-  if (rounded <= 9) return "yellow";
+// Basel zones classify the RAW exception count over exactly one
+// 250-observation window -- green 0-4, yellow 5-9, red 10+. This must be
+// applied to an ACTUAL 250-observation window, never a long-run average
+// rescaled to a 250-day equivalent: rescaling smooths clustering away, and
+// the Christoffersen test above already shows exceptions cluster in time --
+// a rescaled average can show Green while the worst real 250-day window
+// sits in Yellow or Red. Never call this for anything but the 99%
+// historical series.
+export function baselZone(exceptionCount: number): BaselZone {
+  if (exceptionCount <= 4) return "green";
+  if (exceptionCount <= 9) return "yellow";
   return "red";
 }
 
@@ -333,6 +336,106 @@ export const BASEL_ZONE_COLOR: Record<BaselZone, string> = {
   yellow: "#fbbf24",
   red: "#f87171",
 };
+
+export type BaselWindow = {
+  n: number;
+  exceptions: number;
+  zone: BaselZone;
+  startDate: string;
+  endDate: string;
+};
+
+export type BaselRollingPoint = { date: string; count: number };
+
+export type BaselResult = {
+  // The most recent 250-observation window -- what Basel actually evaluates
+  // today.
+  trailing: BaselWindow;
+  // The worst (highest-exception) 250-observation window anywhere in the
+  // backtest -- surfaces clustering that a trailing-only view can miss
+  // entirely once the crisis period has scrolled out of the trailing window.
+  worst: BaselWindow;
+  // True when trailing and worst fall in different zones -- i.e. clustering
+  // materially changed the verdict depending on which window you look at.
+  zonesDiffer: boolean;
+  // One point per day once 250 observations are available -- the trailing
+  // exception count as of that day. Powers the rolling-count chart.
+  rollingSeries: BaselRollingPoint[];
+};
+
+type DatedException = { date: string; exception: boolean };
+
+// Missing-data days are already excluded upstream (same "skip entirely, no
+// hit or miss" convention as everywhere else on this site) -- so this walks
+// observation-by-observation, not calendar-day-by-day.
+function evaluableExceptions(
+  dates: string[],
+  actualReturns: (number | null)[],
+  varSeries: (number | null)[],
+): DatedException[] {
+  const out: DatedException[] = [];
+  for (let i = 0; i < dates.length; i++) {
+    const actual = actualReturns[i];
+    const varValue = varSeries[i];
+    if (actual === null || varValue === null) continue;
+    out.push({ date: dates[i], exception: actual < -varValue });
+  }
+  return out;
+}
+
+// Every 250-observation window's exception count, trailing observation by
+// observation. windows[i] covers evaluable[i - window + 1 .. i] inclusive.
+function rollingBaselWindows(evaluable: DatedException[], window: number): BaselWindow[] {
+  const out: BaselWindow[] = [];
+  let count = 0;
+  for (let i = 0; i < evaluable.length; i++) {
+    if (evaluable[i].exception) count++;
+    if (i >= window && evaluable[i - window].exception) count--;
+    if (i >= window - 1) {
+      out.push({
+        n: window,
+        exceptions: count,
+        zone: baselZone(count),
+        startDate: evaluable[i - window + 1].date,
+        endDate: evaluable[i].date,
+      });
+    }
+  }
+  return out;
+}
+
+function buildBaselResult(evaluable: DatedException[], window = VAR_WINDOW_DAYS): BaselResult | null {
+  if (evaluable.length === 0) return null;
+
+  const windows = rollingBaselWindows(evaluable, window);
+
+  let trailing: BaselWindow;
+  if (windows.length > 0) {
+    trailing = windows[windows.length - 1];
+  } else {
+    // Fewer than a full 250-observation window is available yet (e.g. a
+    // late start date) -- classify whatever's actually there rather than
+    // padding it or refusing to show anything.
+    const exceptions = evaluable.filter((e) => e.exception).length;
+    trailing = {
+      n: evaluable.length,
+      exceptions,
+      zone: baselZone(exceptions),
+      startDate: evaluable[0].date,
+      endDate: evaluable[evaluable.length - 1].date,
+    };
+  }
+
+  const worst =
+    windows.length > 0 ? windows.reduce((best, w) => (w.exceptions > best.exceptions ? w : best), windows[0]) : trailing;
+
+  return {
+    trailing,
+    worst,
+    zonesDiffer: trailing.zone !== worst.zone,
+    rollingSeries: windows.map((w) => ({ date: w.endDate, count: w.exceptions })),
+  };
+}
 
 export type VarChartPoint = {
   date: string;
@@ -349,7 +452,7 @@ export type VarBacktestResult = {
   results: SeriesTestResult[];
   skewness: number | null;
   excessKurtosis: number | null;
-  basel: { n: number; exceptions: number; scaledTo250: number; zone: BaselZone } | null;
+  basel: BaselResult | null;
   numObservations: number;
 };
 
@@ -411,16 +514,8 @@ export function computeVarBacktest({
   const cleanBacktestReturns = cleanReturns(backtestWindowReturns);
   const moments = computeSkewKurtosis(cleanBacktestReturns);
 
-  const hist99 = results[1];
-  const basel =
-    hist99.n > 0
-      ? {
-          n: hist99.n,
-          exceptions: hist99.exceptions,
-          scaledTo250: hist99.exceptions * (VAR_WINDOW_DAYS / hist99.n),
-          zone: baselZone(hist99.exceptions * (VAR_WINDOW_DAYS / hist99.n)),
-        }
-      : null;
+  const hist99Evaluable = evaluableExceptions(slicedDates, slicedReturns, slicedHist99);
+  const basel = buildBaselResult(hist99Evaluable);
 
   return {
     chartPoints,
