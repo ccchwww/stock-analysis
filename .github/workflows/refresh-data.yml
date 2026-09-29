@@ -1,0 +1,65 @@
+name: Refresh market data
+
+on:
+  schedule:
+    # 02:00 UTC, Tuesday through Saturday -- i.e. 22:00 America/Toronto on
+    # Mon-Fri, roughly six hours after the 16:00 TSX close, so the day's
+    # closing prints have settled on Yahoo's side.
+    #
+    # GitHub cron is always UTC and never follows DST, so the Toronto-local
+    # time slides to 21:00 over the winter. Still comfortably after the
+    # close, so no second schedule is needed. Scheduled runs can also be
+    # delayed by GitHub during busy periods; the staleness check in
+    # check_data.py tolerates that, and workflow_dispatch covers the rest.
+    - cron: "0 2 * * 2-6"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Two refreshes racing would both regenerate and both try to push to master;
+# the loser would fail on a non-fast-forward. Queue them instead.
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the local interpreter (3.14.5) the pinned wheels in
+          # backtest/requirements.txt were resolved against.
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backtest/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backtest/requirements.txt
+
+      - name: Regenerate JSON
+        run: ./backtest/refresh.sh
+
+      - name: Safety checks
+        id: check
+        run: python backtest/check_data.py
+
+      # Reached only when every check above passed -- any failure above fails
+      # the job here and now. Nothing is committed, the runner is discarded,
+      # and the previously deployed JSON stays live untouched.
+      - name: Commit and push
+        run: |
+          if git diff --quiet web/public; then
+            echo "web/public is unchanged -- market holiday, or the data was already current."
+            echo "Skipping commit so the history has no empty entries."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public
+          git commit -m "data: refresh through ${{ steps.check.outputs.new_end }}"
+          git push

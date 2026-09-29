@@ -1,0 +1,14 @@
+# Runtime dependencies for the daily data refresh, pinned to the exact
+# versions in the local venv (backtest/venv, Python 3.14.5) so CI regenerates
+# the JSON with the same libraries that produced the committed files.
+#
+# Direct imports only. Jupyter/ipykernel live in the local venv for
+# exploration but CI runs no notebooks, so they are deliberately absent.
+#
+# Keep python-version in .github/workflows/refresh-data.yml ("3.14") in sync
+# with the interpreter above.
+
+numpy==2.5.1      # validation.py
+pandas==3.0.5     # data.py, market_data.py, momentum_backtest.py, strategies.py
+scipy==1.18.0     # validation.py -- exact chi-square p-values for the LR tests
+yfinance==1.5.2   # data.py -- the only network dependency in the pipeline
