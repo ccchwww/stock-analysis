@@ -3,7 +3,7 @@ import { getMarketData } from "@/lib/market-data-results";
 import RiskDashboard from "@/components/risk/RiskDashboard";
 
 export const metadata = {
-  title: "Risk Dashboard · Quant Lab",
+  title: "Risk Dashboard",
 };
 
 export default async function RiskDashboardPage() {

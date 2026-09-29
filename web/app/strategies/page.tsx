@@ -3,7 +3,7 @@ import { getMarketData } from "@/lib/market-data-results";
 import StrategyExplorer from "@/components/strategies/StrategyExplorer";
 
 export const metadata = {
-  title: "Strategies · Quant Lab",
+  title: "Strategies",
 };
 
 export default async function StrategiesPage() {

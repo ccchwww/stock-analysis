@@ -10,9 +10,12 @@ export default function NavBar() {
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-6 px-4 sm:px-6">
-        <span className="font-mono text-sm font-semibold tracking-tight text-foreground">
-          QUANT<span className="text-emerald-400">/</span>LAB
-        </span>
+        <Link
+          href="/"
+          className="font-mono text-sm font-semibold tracking-tight text-foreground transition-opacity hover:opacity-80"
+        >
+          QUANT<span className="text-emerald-400">/</span>RISK
+        </Link>
         <nav className="flex items-center gap-1">
           {NAV_LINKS.map((link) => {
             const active =

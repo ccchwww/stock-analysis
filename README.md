@@ -1,4 +1,4 @@
-# Quant Lab
+# QuantRisk
 
 A backtesting, risk-analysis, and model-validation tool for a basket of
 Canadian large-cap stocks — built to see how far a solo project can go in

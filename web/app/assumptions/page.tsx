@@ -6,7 +6,7 @@ import { getStressData } from "@/lib/stress-data-results";
 import AssumptionsLimitationsPanel from "@/components/assumptions/AssumptionsLimitationsPanel";
 
 export const metadata = {
-  title: "Assumptions & Limitations · Quant Lab",
+  title: "Assumptions & Limitations",
 };
 
 // How many of the stress dataset's tickers have ANY data at all in a given

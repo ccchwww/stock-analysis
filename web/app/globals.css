@@ -21,3 +21,112 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* --- Cursor spotlight (home page only) -------------------------------
+   --x/--y are written directly on the element by Spotlight.tsx /
+   SpotlightCard.tsx inside a requestAnimationFrame-throttled pointermove
+   handler -- never React state, so moving the mouse never re-renders.
+   --spotlight-opacity is the single switch the media queries below flip:
+   set it to 0 and every effect disappears without touching the markup, so
+   the page is complete and correct with the effect fully off. */
+:root {
+  --spotlight-x: 50%;
+  --spotlight-y: 0%;
+  --spotlight-opacity: 1;
+  /* 0 until the pointer first moves, so the spotlight isn't parked at its
+     default 50%/0% as an unexplained bright patch on load. The client
+     components flip this to 1 on the first pointermove. */
+  --spotlight-ready: 0;
+  /* Emerald, matching the existing accent (text-emerald-400 #34d399). */
+  --spotlight-color: 52 211 153;
+}
+
+.spotlight-glow {
+  background: radial-gradient(
+    600px circle at var(--spotlight-x) var(--spotlight-y),
+    rgb(var(--spotlight-color) / 0.06),
+    rgb(var(--spotlight-color) / 0.02) 40%,
+    transparent 70%
+  );
+  opacity: calc(var(--spotlight-opacity) * var(--spotlight-ready));
+  transition: opacity 300ms ease;
+}
+
+/* Border highlight: a gradient ring revealed only near the cursor, drawn
+   in the padding box via mask compositing so it reads as the card's own
+   border lighting up rather than an overlay sitting on top of it. */
+.spotlight-card-border {
+  background: radial-gradient(
+    260px circle at var(--spotlight-x) var(--spotlight-y),
+    rgb(var(--spotlight-color) / 0.55),
+    transparent 65%
+  );
+  opacity: calc(var(--spotlight-opacity) * var(--spotlight-active, 0));
+  transition: opacity 300ms ease;
+  padding: 1px;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.spotlight-card-fill {
+  background: radial-gradient(
+    260px circle at var(--spotlight-x) var(--spotlight-y),
+    rgb(var(--spotlight-color) / 0.07),
+    transparent 60%
+  );
+  opacity: calc(var(--spotlight-opacity) * var(--spotlight-active, 0));
+  transition: opacity 300ms ease;
+}
+
+/* A pointer that can't hover (touch) has no meaningful cursor position,
+   and reduced-motion users shouldn't get a large element tracking them. */
+@media (prefers-reduced-motion: reduce), (hover: none), (pointer: coarse) {
+  :root {
+    --spotlight-opacity: 0;
+  }
+}
+
+/* --- Hero curve draw-in ----------------------------------------------
+   pathLength="1" is set on the path itself, so the dash math is unit-based
+   and doesn't depend on the curve's real length. */
+@keyframes hero-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes hero-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.hero-curve-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: hero-draw 1.5s ease-out 0.15s forwards;
+}
+
+.hero-curve-fade {
+  opacity: 0;
+  animation: hero-fade-in 0.9s ease-out 1.1s forwards;
+}
+
+/* Reduced motion: no drawing, no fading -- the finished state, immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-curve-line {
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .hero-curve-fade {
+    opacity: 1;
+    animation: none;
+  }
+}

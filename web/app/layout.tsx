@@ -15,8 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quant Lab",
-  description: "Stock momentum backtest dashboard",
+  // `default` is required alongside `template`; the template applies to
+  // CHILD segments only, so each tab's page.tsx sets a bare title
+  // ("Strategies") and gets the suffix added here.
+  title: { default: "QuantRisk", template: "%s · QuantRisk" },
+  description: "Backtesting, risk analytics and model validation for Canadian large-cap stocks",
 };
 
 export default function RootLayout({

@@ -5,7 +5,7 @@ import { getRiskData } from "@/lib/risk-results";
 import ModelValidationDashboard from "@/components/validation/ModelValidationDashboard";
 
 export const metadata = {
-  title: "Model Validation · Quant Lab",
+  title: "Model Validation",
 };
 
 export default async function ValidationPage() {
@@ -28,8 +28,7 @@ export default async function ValidationPage() {
           out-of-sample, using standard likelihood-ratio tests. The second
           replays four real historical crises against the current stock
           selection — individually, blended, and via the Efficient
-          Frontier&rsquo;s optimized portfolios. A methodology-notes section
-          is a planned further addition to this same tab.
+          Frontier&rsquo;s optimized portfolios.
         </p>
       </div>
 
