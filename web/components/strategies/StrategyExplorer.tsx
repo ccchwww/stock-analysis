@@ -2,9 +2,25 @@
 
 import { useMemo, useState } from "react";
 import type { ResultsMeta, StrategyResult } from "@/lib/types";
-import type { MarketDataMeta, StockReturns } from "@/lib/market-data-types";
+import type { MarketDataMeta, StockReturns, IndexBenchmark } from "@/lib/market-data-types";
+import type { RiskMeta } from "@/lib/risk-types";
+import type { PerformanceRow } from "@/lib/risk-adjusted";
 import { colorForStrategy } from "@/lib/strategy-colors";
 import { colorForTicker } from "@/lib/stock-colors";
+import {
+  buildBenchmarkOptions,
+  colorForBenchmark,
+  dashForBenchmark,
+  defaultBenchmarkValue,
+  keysForBenchmarkValue,
+} from "@/lib/benchmarks";
+import {
+  MAX_SEARCH_BPS,
+  costScenarioLevels,
+  solveBreakEvenBps,
+  totalReturnAtCost,
+} from "@/lib/cost-model";
+import { computeRiskAdjustedRow } from "@/lib/risk-adjusted";
 import { sliceFromDate } from "@/lib/date-range";
 import { computeDerivedStats, type DerivedStats } from "@/lib/derived-stats";
 import { combineEqualWeight } from "@/lib/returns-math";
@@ -17,7 +33,11 @@ import PortfolioToggle from "@/components/shared/PortfolioToggle";
 import StartDateControl from "@/components/shared/StartDateControl";
 import EquityChart, { type ChartSeries } from "./EquityChart";
 import StrategyMultiSelect from "./StrategyMultiSelect";
+import BenchmarkPicker from "./BenchmarkPicker";
 import ComparisonTable from "./ComparisonTable";
+import RiskMetricsTable from "./RiskMetricsTable";
+import CostSensitivity, { type CostRow } from "./CostSensitivity";
+import LowVolExplainer from "./LowVolExplainer";
 import VerdictBanner from "./VerdictBanner";
 import PortfolioSummary from "./PortfolioSummary";
 import StockStatsTable from "./StockStatsTable";
@@ -26,17 +46,28 @@ import StockStatsTable from "./StockStatsTable";
 const PORTFOLIO_COLOR = "#fbbf24";
 const PORTFOLIO_ID = "__portfolio__";
 const BENCHMARK_ID = "buy_hold";
+const LOW_VOL_ID = "low_vol";
+
+/** Index-benchmark row ids are namespaced so they can never collide with a
+ *  strategy id, a ticker, or the portfolio blend in the chart's merged data. */
+function benchmarkRowId(key: string): string {
+  return `benchmark:${key}`;
+}
 
 export default function StrategyExplorer({
   resultsMeta,
   strategiesRaw,
   marketMeta,
   stocksRaw,
+  indexBenchmarks,
+  riskMeta,
 }: {
   resultsMeta: ResultsMeta;
   strategiesRaw: Record<string, StrategyResult>;
   marketMeta: MarketDataMeta;
   stocksRaw: Record<string, StockReturns>;
+  indexBenchmarks: Record<string, IndexBenchmark>;
+  riskMeta: RiskMeta;
 }) {
   const strategyOrder = resultsMeta.strategy_order;
 
@@ -49,8 +80,16 @@ export default function StrategyExplorer({
     [marketMeta.tickers_used, stocksRaw],
   );
 
+  const benchmarkOptions = useMemo(
+    () => buildBenchmarkOptions(indexBenchmarks),
+    [indexBenchmarks],
+  );
+
   const [startDate, setStartDate] = useState(resultsMeta.date_range.start);
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<string[]>(strategyOrder);
+  const [benchmarkValue, setBenchmarkValue] = useState(() =>
+    defaultBenchmarkValue(indexBenchmarks),
+  );
   const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
   const [combinePortfolio, setCombinePortfolio] = useState(false);
 
@@ -62,21 +101,179 @@ export default function StrategyExplorer({
     if (next.length < 2) setCombinePortfolio(false);
   }
 
-  // Every strategy's stats, recomputed for the current start date -- always
-  // all 4 (the ComparisonTable/verdict compare the full roster regardless
-  // of which lines are toggled onto the chart).
-  const strategyStats: Record<string, DerivedStats> = useMemo(() => {
-    const out: Record<string, DerivedStats> = {};
+  // Every strategy as a scorable row, recomputed for the current start date --
+  // always the full roster (the tables and verdict compare all of them
+  // regardless of which lines are toggled onto the chart).
+  const strategyRows: PerformanceRow[] = useMemo(() => {
+    const rows: PerformanceRow[] = [];
     for (const id of strategyOrder) {
       const strategy = strategiesRaw[id];
       if (!strategy) continue;
       const sliced = sliceFromDate(resultsMeta.dates, strategy.daily_returns, startDate);
-      out[id] = computeDerivedStats(strategy, sliced.dates, sliced.series, resultsMeta.initial_capital);
+      const slicedTurnover = sliceFromDate(
+        resultsMeta.dates,
+        strategy.daily_turnover,
+        startDate,
+      ).series;
+      rows.push({
+        id,
+        label: strategy.label,
+        description: strategy.description,
+        kind: "strategy",
+        color: colorForStrategy(id),
+        dash: id === BENCHMARK_ID ? "4 3" : undefined,
+        stats: computeDerivedStats(
+          strategy,
+          sliced.dates,
+          sliced.series,
+          resultsMeta.initial_capital,
+        ),
+        slicedReturns: sliced.series,
+        slicedTurnover,
+      });
     }
-    return out;
+    return rows;
   }, [strategyOrder, strategiesRaw, resultsMeta.dates, resultsMeta.initial_capital, startDate]);
 
-  // Each selected stock's stats, recomputed for the current start date.
+  const activeBenchmarkKeys = useMemo(
+    () => keysForBenchmarkValue(benchmarkOptions, benchmarkValue),
+    [benchmarkOptions, benchmarkValue],
+  );
+
+  // Passive benchmarks go through the IDENTICAL slice + computeDerivedStats
+  // path as a strategy, so their numbers cannot diverge by being computed a
+  // second way. They carry no turnover: no strategy trading applies to them,
+  // and the strategies' transaction costs are never charged against them.
+  const benchmarkRows: PerformanceRow[] = useMemo(() => {
+    const rows: PerformanceRow[] = [];
+    for (const key of activeBenchmarkKeys) {
+      const benchmark = indexBenchmarks[key];
+      if (!benchmark) continue;
+      const id = benchmarkRowId(key);
+      const sliced = sliceFromDate(marketMeta.dates, benchmark.returns, startDate);
+      rows.push({
+        id,
+        label: benchmark.label,
+        description: benchmark.description,
+        kind: "benchmark",
+        color: colorForBenchmark(key),
+        dash: dashForBenchmark(key),
+        stats: computeDerivedStats(
+          { id, label: benchmark.label, description: benchmark.description },
+          sliced.dates,
+          sliced.series,
+          resultsMeta.initial_capital,
+        ),
+        slicedReturns: sliced.series,
+        slicedTurnover: null,
+      });
+    }
+    return rows;
+  }, [
+    activeBenchmarkKeys,
+    indexBenchmarks,
+    marketMeta.dates,
+    resultsMeta.initial_capital,
+    startDate,
+  ]);
+
+  const allRows = useMemo(
+    () => [...strategyRows, ...benchmarkRows],
+    [strategyRows, benchmarkRows],
+  );
+
+  const colorById = useMemo(
+    () => Object.fromEntries(allRows.map((r) => [r.id, r.color])),
+    [allRows],
+  );
+
+  const riskAdjustedRows = useMemo(
+    () =>
+      allRows.map((row) =>
+        computeRiskAdjustedRow(
+          row,
+          riskMeta.risk_free_rate_annual,
+          riskMeta.trading_days_per_year,
+        ),
+      ),
+    [allRows, riskMeta.risk_free_rate_annual, riskMeta.trading_days_per_year],
+  );
+
+  // --- Cost sensitivity -------------------------------------------------
+  const costLevels = useMemo(
+    () => costScenarioLevels(resultsMeta.cost_bps),
+    [resultsMeta.cost_bps],
+  );
+
+  const costRows: CostRow[] = useMemo(() => {
+    const benchmarkStrategy = strategiesRaw[BENCHMARK_ID];
+    if (!benchmarkStrategy) return [];
+
+    const benchmarkSliced = sliceFromDate(
+      resultsMeta.dates,
+      benchmarkStrategy.daily_returns,
+      startDate,
+    );
+    const benchmarkTurnover = sliceFromDate(
+      resultsMeta.dates,
+      benchmarkStrategy.daily_turnover,
+      startDate,
+    ).series;
+
+    return strategyOrder.flatMap((id) => {
+      const strategy = strategiesRaw[id];
+      if (!strategy) return [];
+      const sliced = sliceFromDate(resultsMeta.dates, strategy.daily_returns, startDate);
+      const turnover = sliceFromDate(
+        resultsMeta.dates,
+        strategy.daily_turnover,
+        startDate,
+      ).series;
+
+      const totalReturns = costLevels.map((bps) =>
+        totalReturnAtCost({
+          dates: sliced.dates,
+          netReturns: sliced.series,
+          turnover,
+          baseCostBps: resultsMeta.cost_bps,
+          newCostBps: bps,
+          initialCapital: resultsMeta.initial_capital,
+        }),
+      );
+
+      const isBenchmarkStrategy = id === BENCHMARK_ID;
+      return [
+        {
+          id,
+          label: strategy.label,
+          color: colorForStrategy(id),
+          totalReturns,
+          isBenchmarkStrategy,
+          breakEven: isBenchmarkStrategy
+            ? ({ kind: "unavailable" } as const)
+            : solveBreakEvenBps({
+                dates: sliced.dates,
+                netReturns: sliced.series,
+                turnover,
+                benchmarkReturns: benchmarkSliced.series,
+                benchmarkTurnover,
+                baseCostBps: resultsMeta.cost_bps,
+                initialCapital: resultsMeta.initial_capital,
+              }),
+        },
+      ];
+    });
+  }, [
+    strategyOrder,
+    strategiesRaw,
+    resultsMeta.dates,
+    resultsMeta.cost_bps,
+    resultsMeta.initial_capital,
+    costLevels,
+    startDate,
+  ]);
+
+  // --- Stock / portfolio overlays (unchanged behaviour) -----------------
   const stockStats: Record<string, DerivedStats> = useMemo(() => {
     const out: Record<string, DerivedStats> = {};
     for (const ticker of selectedTickers) {
@@ -114,18 +311,31 @@ export default function StrategyExplorer({
 
   const chartSeries: ChartSeries[] = useMemo(() => {
     const result: ChartSeries[] = [];
+    const selected = new Set(selectedStrategyIds);
 
-    for (const id of selectedStrategyIds) {
-      const stats = strategyStats[id];
-      const strategy = strategiesRaw[id];
-      if (!stats || !strategy || stats.chartCurve.length === 0) continue;
+    for (const row of strategyRows) {
+      if (!selected.has(row.id) || row.stats.chartCurve.length === 0) continue;
       result.push({
-        id,
-        label: strategy.label,
-        color: colorForStrategy(id),
-        equityCurve: stats.chartCurve,
-        dashed: id === BENCHMARK_ID,
-        strokeWidth: id === BENCHMARK_ID ? 1.5 : 2,
+        id: row.id,
+        label: row.label,
+        color: row.color,
+        equityCurve: row.stats.chartCurve,
+        dashArray: row.dash,
+        strokeWidth: row.id === BENCHMARK_ID ? 1.5 : 2,
+      });
+    }
+
+    // Benchmarks are driven by their own picker, not the strategy toggles --
+    // they are the frame of reference, not one of the things being compared.
+    for (const row of benchmarkRows) {
+      if (row.stats.chartCurve.length === 0) continue;
+      result.push({
+        id: row.id,
+        label: row.label,
+        color: row.color,
+        equityCurve: row.stats.chartCurve,
+        dashArray: row.dash,
+        strokeWidth: 1.5,
       });
     }
 
@@ -152,7 +362,20 @@ export default function StrategyExplorer({
     }
 
     return result;
-  }, [selectedStrategyIds, strategyStats, strategiesRaw, effectiveCombine, portfolioStats, selectedTickers, stockStats]);
+  }, [
+    selectedStrategyIds,
+    strategyRows,
+    benchmarkRows,
+    effectiveCombine,
+    portfolioStats,
+    selectedTickers,
+    stockStats,
+  ]);
+
+  const strategyStats: Record<string, DerivedStats> = useMemo(
+    () => Object.fromEntries(strategyRows.map((r) => [r.id, r.stats])),
+    [strategyRows],
+  );
 
   const verdict = useMemo(
     () => computeVerdict(strategyStats, strategyOrder, resultsMeta.cost_bps),
@@ -168,6 +391,8 @@ export default function StrategyExplorer({
     benchmark?.totalReturn !== null && benchmark?.totalReturn !== undefined
       ? bestActive.totalReturn - benchmark.totalReturn
       : null;
+
+  const lowVol = strategiesRaw[LOW_VOL_ID];
 
   return (
     <div className="flex flex-col gap-8">
@@ -195,6 +420,13 @@ export default function StrategyExplorer({
             min={resultsMeta.date_range.start}
             max={resultsMeta.date_range.end}
             onChange={setStartDate}
+          />
+        </div>
+        <div className="mt-4 border-t border-border pt-4">
+          <BenchmarkPicker
+            options={benchmarkOptions}
+            value={benchmarkValue}
+            onChange={setBenchmarkValue}
           />
         </div>
         <div className="mt-4 border-t border-border pt-4">
@@ -248,9 +480,57 @@ export default function StrategyExplorer({
 
       <EquityChart series={chartSeries} />
 
-      <ComparisonTable strategies={strategyStats} order={strategyOrder} />
+      <div className="rounded-lg border border-border bg-surface p-4 text-xs leading-relaxed text-zinc-400">
+        <p>
+          <span className="font-medium text-zinc-200">
+            Two different benchmarks, two different questions.
+          </span>{" "}
+          Buy &amp; Hold is an equal-weight basket of the same {resultsMeta.num_tickers} stocks
+          the strategies pick from — it asks whether the picking rules beat holding the same
+          names. An index benchmark is what a passive investor would actually hold instead —
+          it asks whether any of this was worth doing at all.
+        </p>
+        <p className="mt-2">
+          Index lines are <span className="text-zinc-200">ETF total returns in Canadian
+          dollars</span>, taken from dividend-adjusted closes, so they are net of each
+          fund&rsquo;s management fee (MER) and directly comparable to the dividend-inclusive
+          stock returns used everywhere else. The S&amp;P 500 line is unhedged, so it includes
+          USD/CAD currency moves as well as the US market&rsquo;s own return — part of the gap
+          it shows is the exchange rate, not the index. No strategy transaction cost is charged
+          against a benchmark; they are held, not traded.
+        </p>
+      </div>
+
+      <ComparisonTable rows={allRows} />
 
       {verdict && <VerdictBanner verdict={verdict} />}
+
+      <RiskMetricsTable
+        rows={allRows}
+        metrics={riskAdjustedRows}
+        colorById={colorById}
+        riskFreeRateAnnual={riskMeta.risk_free_rate_annual}
+        tradingDays={riskMeta.trading_days_per_year}
+        startDate={startDate}
+      />
+
+      <CostSensitivity
+        rows={costRows}
+        levels={costLevels}
+        defaultBps={resultsMeta.cost_bps}
+        maxSearchBps={MAX_SEARCH_BPS}
+        startDate={startDate}
+        benchmarkLabel={strategiesRaw[BENCHMARK_ID]?.label ?? "Buy & Hold"}
+      />
+
+      {lowVol && (
+        <LowVolExplainer
+          lookbackDays={resultsMeta.low_vol_lookback_days}
+          topN={resultsMeta.top_n}
+          minCoverageFraction={resultsMeta.low_vol_min_coverage_fraction}
+          holdings={resultsMeta.low_vol_holdings}
+        />
+      )}
 
       {effectiveCombine && portfolioStats && (
         <PortfolioSummary summary={portfolioStats} numStocks={selectedTickers.length} />

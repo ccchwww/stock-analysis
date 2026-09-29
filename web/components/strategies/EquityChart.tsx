@@ -18,7 +18,10 @@ export type ChartSeries = {
   label: string;
   color: string;
   equityCurve: EquityPoint[];
-  dashed?: boolean;
+  /** SVG stroke-dasharray. Passive benchmark lines each get their own pattern
+   *  so they stay separable from one another, and from the solid strategy
+   *  lines, without relying on colour alone. Undefined means solid. */
+  dashArray?: string;
   strokeWidth?: number;
 };
 
@@ -41,7 +44,8 @@ export default function EquityChart({ series }: { series: ChartSeries[] }) {
     <div className="rounded-lg border border-border bg-surface p-4">
       <h2 className="text-sm font-semibold text-foreground">Growth of $10,000</h2>
       <p className="mb-4 text-xs text-zinc-500">
-        Equity curve per selection, sampled weekly over the full test window.
+        Equity curve per selection, from the selected start date. Dashed lines are passive
+        benchmarks — held, never traded, so no strategy transaction cost is charged to them.
       </p>
       {series.length === 0 ? (
         <div className="flex h-80 items-center justify-center text-sm text-zinc-500 sm:h-96">
@@ -94,7 +98,7 @@ export default function EquityChart({ series }: { series: ChartSeries[] }) {
                   name={s.id}
                   stroke={s.color}
                   strokeWidth={s.strokeWidth ?? 2}
-                  strokeDasharray={s.dashed ? "4 3" : undefined}
+                  strokeDasharray={s.dashArray}
                   dot={false}
                   connectNulls
                   isAnimationActive={false}

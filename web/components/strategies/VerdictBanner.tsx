@@ -11,7 +11,9 @@ export default function VerdictBanner({ verdict }: { verdict: Verdict }) {
 
   // Winning rank-and-select strategies, biggest edge first -- the caveat
   // names them specifically rather than gesturing at "the results", since
-  // the whole point is that THIS gap is the unreliable number.
+  // the whole point is that THIS gap is the unreliable number. Derived from
+  // the verdict's own comparisons, so adding a strategy to the backtest puts
+  // it here automatically if (and only if) it actually wins.
   const biasedWinners = verdict.comparisons
     .filter((c) => c.beatsBenchmark && isSelectionStrategy(c.id))
     .sort((a, b) => b.diffVsBenchmarkPts - a.diffVsBenchmarkPts);
@@ -39,8 +41,10 @@ export default function VerdictBanner({ verdict }: { verdict: Verdict }) {
           <p className="mt-2 text-sm leading-relaxed text-zinc-300">
             The universe is <span className="text-zinc-100">today&rsquo;s</span>{" "}
             S&amp;P/TSX 60 constituents applied backwards across the whole window. Companies dropped from the index — acquired, delisted,
-            or demoted — are missing entirely, so a strategy that ranks and buys past winners is selecting
-            from a pool that has already been filtered for survival.{" "}
+            or demoted — are missing entirely, so any strategy that ranks the universe and buys a subset of it
+            is selecting from a pool that has already been filtered for survival. That applies whether the
+            screen is past return or past volatility: a company that was quietly compounding rather than
+            collapsing is exactly the kind that stays in an index.{" "}
             <span className="text-zinc-100">
               {top.label}&rsquo;s {top.diffVsBenchmarkPts >= 0 ? "+" : ""}
               {top.diffVsBenchmarkPts.toFixed(1)}{" "}

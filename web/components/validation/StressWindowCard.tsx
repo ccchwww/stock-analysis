@@ -44,9 +44,12 @@ function StatRow({
 export default function StressWindowCard({
   result,
   names,
+  benchmarkName,
 }: {
   result: StressWindowResult;
   names: Record<string, string>;
+  /** From stress_data.json's own benchmark entry (backtest/config.py). */
+  benchmarkName: string;
 }) {
   const { window, tickerCoverage, perStock, equalWeight, benchmark, minVariance, maxSharpe, correlation } = result;
   const uncovered = tickerCoverage.filter((c) => !c.covered);
@@ -101,7 +104,7 @@ export default function StressWindowCard({
               <StatRow key={ticker} label={tickerWithName(ticker, names[ticker])} stats={perStock[ticker]} />
             ))}
             <StatRow label="Equal-Weight" stats={equalWeight} sublabel="of selected, covered stocks" />
-            <StatRow label="Benchmark" stats={benchmark} sublabel="S&P/TSX Composite" />
+            <StatRow label="Benchmark" stats={benchmark} sublabel={benchmarkName} />
             <StatRow
               label="Min-Variance"
               stats={minVariance.insufficientData ? null : minVariance.stats}

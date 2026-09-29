@@ -70,6 +70,9 @@ export default async function AssumptionsPage() {
 
       <AssumptionsLimitationsPanel
         marketMeta={marketData.meta}
+        benchmarkName={marketData.benchmark.name}
+        benchmarkTicker={marketData.benchmark.ticker}
+        indexBenchmarks={Object.values(marketData.index_benchmarks)}
         resultsMeta={resultsData.meta}
         riskMeta={riskData.meta}
         validationMeta={validationData.meta}

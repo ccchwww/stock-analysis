@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { MarketDataMeta } from "@/lib/market-data-types";
+import type { MarketDataMeta, IndexBenchmark } from "@/lib/market-data-types";
 import type { ResultsMeta } from "@/lib/types";
 import type { RiskMeta } from "@/lib/risk-types";
 import type { ValidationMeta, StressMeta } from "@/lib/validation-types";
@@ -26,6 +26,9 @@ function Item({ children }: { children: ReactNode }) {
 
 export default function AssumptionsLimitationsPanel({
   marketMeta,
+  benchmarkName,
+  benchmarkTicker,
+  indexBenchmarks,
   resultsMeta,
   riskMeta,
   validationMeta,
@@ -34,6 +37,12 @@ export default function AssumptionsLimitationsPanel({
   gfcLookbackCoverage,
 }: {
   marketMeta: MarketDataMeta;
+  /** CAPM benchmark identity, read from market_data.json rather than written
+   *  here, so changing BENCHMARK_TICKER in backtest/config.py updates this
+   *  page too. */
+  benchmarkName: string;
+  benchmarkTicker: string;
+  indexBenchmarks: IndexBenchmark[];
   resultsMeta: ResultsMeta;
   riskMeta: RiskMeta;
   validationMeta: ValidationMeta;
@@ -70,6 +79,32 @@ export default function AssumptionsLimitationsPanel({
           )}
         </Item>
         <Item>
+          Benchmarks are <span className="text-zinc-200">CAD-listed ETFs, not index levels</span>. An index
+          such as the S&amp;P/TSX Composite is a price index — it excludes dividends, while these stock
+          returns include them, so regressing one against the other used to credit the index&rsquo;s entire
+          dividend yield to alpha. The ETFs&rsquo; adjusted closes are total returns on the same basis.
+          The trade-off is that an ETF return is{" "}
+          <span className="text-zinc-200">net of that fund&rsquo;s management fee (MER)</span> and carries
+          its own tracking error, so each benchmark sits slightly below the index it follows. Current
+          benchmarks: {benchmarkName} (<code>{benchmarkTicker}</code>) for CAPM beta/alpha and stress
+          testing
+          {indexBenchmarks.length > 0 && (
+            <>
+              , plus{" "}
+              {indexBenchmarks.map((b) => `${b.label} (${b.ticker})`).join(" and ")} as passive comparisons
+              on the Strategies tab
+            </>
+          )}
+          .
+        </Item>
+        <Item>
+          The S&amp;P 500 benchmark is <span className="text-zinc-200">unhedged</span>, so its returns
+          include the USD/CAD exchange-rate move as well as the US market&rsquo;s own performance. That is
+          deliberate — it is what a Canadian investor holding that fund actually experienced — but it means
+          part of any gap it shows against the Canadian lines is currency, not equity performance, and the
+          two are not separated anywhere on the site.
+        </Item>
+        <Item>
           No independent TSX holiday calendar is cross-checked — trading days come from whatever yfinance
           returns for each <code>.TO</code> ticker and the benchmark, inner-joined against each other.
         </Item>
@@ -89,7 +124,27 @@ export default function AssumptionsLimitationsPanel({
         </Item>
         <Item>
           Beta/Alpha use a single-factor CAPM against the {riskMeta.trading_days_per_year}-trading-day-a-year
-          convention and the S&amp;P/TSX Composite only — no size, value, momentum, or sector factors.
+          convention and {benchmarkName} only — no size, value, momentum, or sector factors.
+          The benchmark is a total-return ETF rather than a price index, so its dividends are included on
+          the same basis as the stocks it is regressed against; an index level would have leaked its whole
+          dividend yield into alpha.
+        </Item>
+        <Item>
+          The Low-Volatility strategy ranks on realized volatility over a fixed{" "}
+          {resultsMeta.low_vol_lookback_days}-trading-day trailing window, requiring{" "}
+          {formatPct(resultsMeta.low_vol_min_coverage_fraction, 0)} coverage of it to rank a name. That
+          window length is a fixed choice in <code>backtest/config.py</code>, not tuned — and a backward
+          -looking volatility estimate says nothing about a stock that is about to become volatile. A pure
+          volatility screen also applies no sector constraint, so it concentrates in defensive sectors by
+          construction.
+        </Item>
+        <Item>
+          Cost sensitivity re-prices each strategy at other transaction-cost levels arithmetically rather
+          than re-running the backtest: cost enters each day&rsquo;s return as turnover × bps, and no
+          strategy&rsquo;s stock selection reads the cost assumption, so the holdings are identical at every
+          level and the restatement is exact. That exactness is about the <em>model</em>, not reality — the
+          {" "}{resultsMeta.cost_bps.toFixed(0)} bps default is a floor that excludes bid-ask spread, market
+          impact, taxes and failed fills.
         </Item>
         <Item>
           The Efficient Frontier optimizer treats historical mean returns and covariance as estimates of the
@@ -120,15 +175,24 @@ export default function AssumptionsLimitationsPanel({
           every change.
         </Item>
         <Item>
-          Nothing regenerates the data on a schedule — every JSON file here is produced by manually running
-          the Python scripts in <code>backtest/</code>. The &ldquo;Data as of&rdquo; stamp in the footer
-          reflects whenever that was last done, not a live feed.
+          The data refreshes once per weeknight after the TSX close via a scheduled GitHub Actions job
+          (<code>.github/workflows/refresh-data.yml</code>), which regenerates the JSON, runs a set of
+          safety checks against the previous version, and commits only if they pass. It is still not a live
+          feed: the &ldquo;Data as of&rdquo; stamp in the footer is the last date the market data actually
+          covers, and if a refresh fails the previously published data simply stays up — the footer shows a
+          staleness warning once it falls more than four business days behind.
+          <span className="block mt-1">
+            The long-history stress dataset (<code>stress_data.json</code>) is deliberately excluded from
+            that job: its four crisis windows have fixed dates and cannot change, so it is regenerated by
+            hand only when the benchmark or universe changes.
+          </span>
         </Item>
         <Item>
           Stress-test optimized portfolios assume free rebalancing into the estimated weights — unlike the
-          four trading strategies, which pay an explicit {resultsMeta.cost_bps.toFixed(0)} bps per-trade cost
-          (see <code>backtest/costs.py</code>), no transaction cost is charged for entering the min-variance
-          or max-Sharpe portfolios in a stress window.
+          {" "}{resultsMeta.strategy_order.length} trading strategies, which pay an explicit{" "}
+          {resultsMeta.cost_bps.toFixed(0)} bps per-trade cost (see <code>backtest/costs.py</code>), no
+          transaction cost is charged for entering the min-variance or max-Sharpe portfolios in a stress
+          window.
         </Item>
         <Item>
           Every metric on this site is computed client-side, in the browser, from full daily-return JSON

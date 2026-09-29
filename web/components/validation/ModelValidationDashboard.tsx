@@ -165,6 +165,7 @@ export default function ModelValidationDashboard({
         dates={stressDataMeta.dates}
         returnsByTicker={stressReturnsByTicker}
         benchmarkReturns={stressBenchmark.returns}
+        benchmarkName={stressBenchmark.name}
         stressConfig={stressConfig}
         riskFreeRateAnnual={riskMeta.risk_free_rate_annual}
         tradingDays={riskMeta.trading_days_per_year}

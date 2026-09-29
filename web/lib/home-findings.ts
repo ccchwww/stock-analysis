@@ -1,9 +1,9 @@
 // Headline findings for the landing page, computed at BUILD TIME from the
 // same JSON and the same lib functions the Model Validation tab uses --
-// never hardcoded, because the data will soon refresh daily (see
-// MODEL_DOCUMENTATION.md's remediation table) and a stale hand-written
-// number on the front page would be exactly the kind of unverified claim
-// the rest of this site exists to avoid.
+// never hardcoded, because the data refreshes every weeknight
+// (.github/workflows/refresh-data.yml) and a stale hand-written number on
+// the front page would be exactly the kind of unverified claim the rest of
+// this site exists to avoid.
 //
 // This module reimplements NO math. It calls computeVarBacktest() and
 // computeStressTestResults() with the same inputs the Validation tab

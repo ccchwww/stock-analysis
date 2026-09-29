@@ -7,6 +7,7 @@ import { getResults } from "@/lib/results";
 import { computeHomeFindings, type Finding } from "@/lib/home-findings";
 import { computeHeroArt, computeHeroStats } from "@/lib/home-hero";
 import { AUTHOR, MODEL_DOC_URL, SITE, isPlaceholder } from "@/lib/site";
+import DataFreshnessBadge from "@/components/nav/DataFreshnessBadge";
 import Spotlight from "@/components/home/Spotlight";
 import SpotlightCard from "@/components/home/SpotlightCard";
 import HeroCurve from "@/components/home/HeroCurve";
@@ -37,7 +38,7 @@ const BUTTON_SECONDARY = `${BUTTON_BASE} border border-border text-zinc-300 hove
 const DIFFERENTIATORS = [
   {
     title: "Out-of-sample everywhere",
-    body: "Each day's VaR forecast is built only from the 250 days before it, never including the day it predicts. Stress-test portfolio weights are estimated from the 3 years before each crisis opens, then held fixed through it. Where a look-ahead rule is load-bearing, the code says so at the point it's enforced.",
+    body: "Each day's VaR forecast is built only from the 250 days before it, never including the day it predicts. Stress-test portfolio weights are estimated from the 3 years before each crisis opens, then held fixed through it. Every strategy's monthly basket is chosen on the previous month's final close, asserted on each rebalance rather than trusted. Where a look-ahead rule is load-bearing, the code says so at the point it's enforced.",
   },
   {
     title: "The models are statistically tested",
@@ -49,23 +50,38 @@ const DIFFERENTIATORS = [
   },
 ];
 
-const TABS = [
-  {
-    href: "/strategies",
-    title: "Strategies",
-    body: "Four trading strategies backtested against Buy & Hold over the TSX 60, net of transaction costs — with the survivorship caveat attached to the winning result.",
-  },
-  {
-    href: "/risk-dashboard",
-    title: "Risk Dashboard",
-    body: "Volatility, Sharpe, drawdown, VaR, expected shortfall, correlation, CAPM beta/alpha, rolling metrics, Monte Carlo, and a long-only efficient frontier.",
-  },
-  {
-    href: "/validation",
-    title: "Model Validation",
-    body: "Does any of the above actually work? VaR backtesting with three likelihood-ratio tests, the Basel traffic light, and four real crises replayed against the current selection.",
-  },
-];
+// Built from the loaded JSON rather than written out, so the counts here can
+// never disagree with what the tabs actually show after a data refresh adds,
+// removes, or renames a strategy, benchmark, or crisis window.
+function buildTabs({
+  numStrategies,
+  benchmarkLabels,
+  numCrises,
+}: {
+  numStrategies: number;
+  benchmarkLabels: string[];
+  numCrises: number;
+}) {
+  const benchmarkText =
+    benchmarkLabels.length > 0 ? benchmarkLabels.join(" and ") : "passive index";
+  return [
+    {
+      href: "/strategies",
+      title: "Strategies",
+      body: `${numStrategies} trading strategies backtested against both an equal-weight Buy & Hold of the same names and passive ${benchmarkText} ETF benchmarks in CAD — net of transaction costs, with a cost-sensitivity panel showing the break-even cost at which each edge disappears, and the survivorship caveat attached to the winning result.`,
+    },
+    {
+      href: "/risk-dashboard",
+      title: "Risk Dashboard",
+      body: "Volatility, Sharpe, drawdown, VaR, expected shortfall, correlation, CAPM beta/alpha, rolling metrics, Monte Carlo, and a long-only efficient frontier.",
+    },
+    {
+      href: "/validation",
+      title: "Model Validation",
+      body: `Does any of the above actually work? VaR backtesting with three likelihood-ratio tests, the Basel traffic light, and ${numCrises} real crises replayed against the current selection.`,
+    },
+  ];
+}
 
 export default async function Home() {
   const [marketData, stressData, validationData, riskData, results] = await Promise.all([
@@ -81,6 +97,12 @@ export default async function Home() {
     stressData,
     validationData,
     riskMeta: riskData.meta,
+  });
+
+  const tabs = buildTabs({
+    numStrategies: results.meta.strategy_order.length,
+    benchmarkLabels: Object.values(marketData.index_benchmarks).map((b) => b.label),
+    numCrises: validationData.stress.windows.length,
   });
 
   const heroArt = computeHeroArt(results);
@@ -118,6 +140,28 @@ export default async function Home() {
             <Link href="/validation" className={BUTTON_SECONDARY}>
               Model Validation
             </Link>
+          </div>
+
+          {/* Freshness stamp. The date is market_data.json's own last covered
+              trading day, and the badge beside it is a client component that
+              compares it to the VIEWER's clock -- this page is statically
+              prerendered and only rebuilds when a refresh succeeds, so a
+              build-time staleness check could never fire on the one day it
+              matters. */}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-zinc-400">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            </span>
+            <span>
+              Market data through{" "}
+              <span className="font-mono text-zinc-200">{dataAsOf}</span>
+            </span>
+            <span aria-hidden className="text-zinc-600">
+              ·
+            </span>
+            <span>refreshed automatically each weeknight after the TSX close</span>
+            <DataFreshnessBadge asOf={dataAsOf} />
           </div>
 
           {/* Stats strip. Values come from the same loaders the rest of
@@ -184,7 +228,7 @@ export default async function Home() {
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Explore</h2>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <SpotlightCard key={t.href} href={t.href} className="p-4">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-foreground">{t.title}</h3>

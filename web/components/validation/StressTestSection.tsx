@@ -12,6 +12,7 @@ export default function StressTestSection({
   dates,
   returnsByTicker,
   benchmarkReturns,
+  benchmarkName,
   stressConfig,
   riskFreeRateAnnual,
   tradingDays,
@@ -21,6 +22,8 @@ export default function StressTestSection({
   dates: string[];
   returnsByTicker: Record<string, (number | null)[]>;
   benchmarkReturns: (number | null)[];
+  /** From stress_data.json's benchmark entry (backtest/config.py). */
+  benchmarkName: string;
   stressConfig: StressMeta;
   riskFreeRateAnnual: number;
   tradingDays: number;
@@ -120,7 +123,7 @@ export default function StressTestSection({
           </div>
 
           {results.map((r) => (
-            <StressWindowCard key={r.window.key} result={r} names={names} />
+            <StressWindowCard key={r.window.key} result={r} names={names} benchmarkName={benchmarkName} />
           ))}
 
           <div className="rounded-lg border border-border bg-surface p-4">

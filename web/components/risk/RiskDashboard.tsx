@@ -236,6 +236,7 @@ export default function RiskDashboard({
           metrics={portfolioMetrics}
           numStocks={selectedTickers.length}
           meta={riskMeta}
+          benchmarkName={benchmark.name}
         />
       ) : selectedTickers.length > 0 ? (
         <RiskMetricsTable
@@ -256,6 +257,7 @@ export default function RiskDashboard({
         targets={rollingTargets}
         marketReturns={slicedMarketReturns}
         meta={riskMeta}
+        benchmarkName={benchmark.name}
       />
 
       <CorrelationHeatmap tickers={selectedTickers} matrix={correlationMatrix} names={names} />

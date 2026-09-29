@@ -17,9 +17,11 @@ What is checked, and why each one exists:
   * No ticker disappears and the count never shrinks. data.py silently drops
     names with < MIN_HISTORY_FRACTION coverage, so a bad download shows up as
     a smaller universe rather than an error.
-  * The ^GSPTSE benchmark is present and actually has the new dates. Beta and
-    Alpha need paired (stock, market) observations; a benchmark that stops
-    updating breaks them quietly.
+  * The CAPM benchmark (config.BENCHMARK_TICKER) and every passive index
+    benchmark (config.INDEX_BENCHMARKS) are present and actually have the new
+    dates. Beta and Alpha need paired (stock, market) observations, and the
+    Strategies tab plots the index lines; either one stalling breaks a page
+    quietly rather than loudly.
   * No NEW daily return exceeds 40% in absolute value -- the signature of a
     missed split or a bad print.
   * Overlap consistency: on dates present in BOTH vintages, the daily returns
@@ -54,6 +56,15 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 PUBLIC_RELDIR = "web/public"
 
+# The backtest scripts are plain modules of backtest/, imported by bare name
+# (`from config import ...`). This script is normally invoked from the repo
+# root as `python backtest/check_data.py`, so its own directory is not on
+# sys.path -- put it there rather than duplicating the benchmark tickers,
+# which is exactly the kind of drift these checks exist to catch.
+sys.path.insert(0, str(SCRIPT_DIR))
+
+from config import BENCHMARK_TICKER, INDEX_BENCHMARKS  # noqa: E402
+
 # Everything the daily refresh rewrites. stress_data.json is deliberately
 # absent: refresh.sh does not regenerate it.
 DATA_FILES = ("market_data.json", "results.json", "risk.json", "validation.json")
@@ -61,8 +72,6 @@ DATA_FILES = ("market_data.json", "results.json", "risk.json", "validation.json"
 # The subset carrying meta.date_range / meta.tickers_used. risk.json and
 # validation.json are pure config dumps -- structure is all there is to check.
 DATED_FILES = ("market_data.json", "results.json")
-
-BENCHMARK_TICKER = "^GSPTSE"
 
 # A real TSX 60 large-cap moving more than this in one session is a data
 # error far more often than it is news.
@@ -104,29 +113,34 @@ def git_show(ref, relpath):
 
 
 def series_by_date(payload):
-    """{ticker: {date: return}} for a market_data.json-shaped payload.
+    """{series key: {date: return}} for a market_data.json-shaped payload.
 
     The JSON stores each return series as a bare array aligned BY POSITION to
     meta.dates, so comparing two vintages means re-keying by date first --
     positions shift the moment a single trading day is added or dropped.
     Nulls are omitted, so a date's absence means "no usable return".
+
+    Stocks and the CAPM benchmark are keyed by ticker; index benchmarks get an
+    "index:<key>" prefix, because the TSX 60 ETF is deliberately both the CAPM
+    benchmark and an index benchmark and would otherwise collide with itself.
     """
     dates = payload["meta"]["dates"]
-    entries = list(payload.get("stocks", {}).values())
+    entries = [(entry.get("ticker", "<unnamed>"), entry) for entry in payload.get("stocks", {}).values()]
     benchmark = payload.get("benchmark")
     if benchmark:
-        entries.append(benchmark)
+        entries.append((benchmark.get("ticker", "<benchmark>"), benchmark))
+    for key, entry in (payload.get("index_benchmarks") or {}).items():
+        entries.append((f"index:{key}", entry))
 
     out = {}
-    for entry in entries:
-        ticker = entry.get("ticker", "<unnamed>")
+    for key, entry in entries:
         returns = entry["returns"]
         if len(returns) != len(dates):
             raise ValueError(
-                f"{ticker}: {len(returns)} returns against {len(dates)} dates -- "
+                f"{key}: {len(returns)} returns against {len(dates)} dates -- "
                 "the by-position alignment with meta.dates is broken"
             )
-        out[ticker] = {d: r for d, r in zip(dates, returns) if r is not None}
+        out[key] = {d: r for d, r in zip(dates, returns) if r is not None}
     return out
 
 
@@ -260,28 +274,60 @@ def check_returns(report, new_data, old_data):
     # ISO-8601 sorts lexicographically, so plain string comparison is fine.
     added_dates = [d for d in new_dates if d > old_end]
 
-    # --- benchmark present, and covering the newly added days ---
-    benchmark = new_data[name].get("benchmark") or {}
-    if benchmark.get("ticker") != BENCHMARK_TICKER:
-        report.fail(
-            f"{name}: benchmark {BENCHMARK_TICKER} is missing (found "
-            f"{benchmark.get('ticker')!r}) -- Beta/Alpha have no market to price against"
-        )
-    else:
-        bench_series = new_series.get(BENCHMARK_TICKER, {})
-        gaps = [d for d in added_dates if d not in bench_series]
+    def check_series_covers_new_dates(series_key, description):
+        """Shared gate for every benchmark line: present, and carrying a real
+        return on each newly added trading day."""
+        series = new_series.get(series_key)
+        if series is None:
+            report.fail(f"{name}: {description} is missing entirely")
+            return
+        gaps = [d for d in added_dates if d not in series]
         if gaps:
             report.fail(
-                f"{name}: benchmark {BENCHMARK_TICKER} has no return on "
-                f"{len(gaps)} of the {len(added_dates)} new date(s): "
+                f"{name}: {description} has no return on {len(gaps)} of the "
+                f"{len(added_dates)} new date(s): "
                 + ", ".join(gaps[:5])
                 + (" ..." if len(gaps) > 5 else "")
             )
         else:
             report.ok(
-                f"{name}: benchmark {BENCHMARK_TICKER} present and covers all "
-                f"{len(added_dates)} new date(s)"
+                f"{name}: {description} present and covers all {len(added_dates)} new date(s)"
             )
+
+    # --- CAPM benchmark present, and covering the newly added days ---
+    benchmark = new_data[name].get("benchmark") or {}
+    if benchmark.get("ticker") != BENCHMARK_TICKER:
+        report.fail(
+            f"{name}: CAPM benchmark {BENCHMARK_TICKER} is missing (found "
+            f"{benchmark.get('ticker')!r}) -- Beta/Alpha have no market to price against"
+        )
+    else:
+        check_series_covers_new_dates(BENCHMARK_TICKER, f"CAPM benchmark {BENCHMARK_TICKER}")
+
+    # --- every passive index benchmark the Strategies tab plots ---
+    new_index = new_data[name].get("index_benchmarks") or {}
+    old_index = old_data[name].get("index_benchmarks") or {}
+    expected_keys = [b["key"] for b in INDEX_BENCHMARKS]
+
+    missing_config = [k for k in expected_keys if k not in new_index]
+    if missing_config:
+        report.fail(
+            f"{name}: index benchmark(s) declared in config.py are absent from the "
+            f"generated file: {', '.join(missing_config)}"
+        )
+    dropped = [k for k in old_index if k not in new_index]
+    if dropped:
+        report.fail(
+            f"{name}: index benchmark(s) present in the previous version have "
+            f"disappeared: {', '.join(dropped)}"
+        )
+    for key in expected_keys:
+        entry = new_index.get(key)
+        if entry is None:
+            continue  # already reported above
+        check_series_covers_new_dates(
+            f"index:{key}", f"index benchmark {entry.get('ticker', key)} ({key})"
+        )
 
     # --- implausible new daily moves ---
     extremes = []

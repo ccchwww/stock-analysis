@@ -19,11 +19,15 @@ export default function RollingMetricsSection({
   targets,
   marketReturns,
   meta,
+  benchmarkName,
 }: {
   dates: string[];
   targets: RollingTarget[];
   marketReturns: (number | null)[];
   meta: RiskMeta;
+  /** From market_data.json's own benchmark entry, never a literal -- the
+   *  CAPM benchmark is set in backtest/config.py and this label follows it. */
+  benchmarkName: string;
 }) {
   const volRows = useMemo(
     () =>
@@ -114,7 +118,7 @@ export default function RollingMetricsSection({
 
       <RollingMetricsChart
         title="Rolling Beta"
-        description={`Trailing ${ROLLING_WINDOW_DAYS}-day sensitivity to the S&P/TSX Composite.`}
+        description={`Trailing ${ROLLING_WINDOW_DAYS}-day sensitivity to ${benchmarkName}.`}
         data={betaRows}
         series={series}
         yTickFormatter={(v) => v.toFixed(1)}

@@ -18,10 +18,15 @@ here as more than a demonstration.
 
 Three tabs, one shared Python-to-JSON data pipeline underneath:
 
-- **Strategies** — backtests four rules (1-day momentum, 12-month momentum,
-  mean reversion, and a buy-and-hold benchmark) over ~51 stocks and a
-  configurable transaction cost, with an interactive stock picker and
-  start-date control that recompute every stat live.
+- **Strategies** — backtests five rules (1-day momentum, 12-month momentum,
+  mean reversion, low volatility, and a buy-and-hold benchmark) over ~51
+  stocks, against passive CAD index-ETF benchmarks (S&P/TSX 60 and unhedged
+  S&P 500) as well as the same-universe Buy & Hold. Adds a risk-adjusted
+  comparison (CAGR, volatility, Sharpe, max drawdown, annualized turnover)
+  and a cost-sensitivity panel that shows total return across a range of
+  transaction costs plus the break-even cost at which each edge disappears.
+  An interactive stock picker and start-date control recompute every stat
+  live.
 - **Risk Dashboard** — volatility, Sharpe, max drawdown, historical VaR and
   Expected Shortfall, Beta/Alpha (CAPM), a correlation heatmap, rolling
   (time-varying) risk metrics, a Monte Carlo outcome projection, and a

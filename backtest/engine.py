@@ -3,7 +3,7 @@ an equity curve ($10k growth), a total cumulative return, and up-rate/avg-return
 stats over whatever period the strategy naturally rebalances on.
 
 Every strategy hands back a daily return series, so this module is the single
-place that defines "how do we score a strategy" -- keeping the four strategies
+place that defines "how do we score a strategy" -- keeping the five strategies
 directly comparable instead of each computing its own metrics ad hoc.
 """
 

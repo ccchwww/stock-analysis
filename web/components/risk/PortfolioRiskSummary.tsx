@@ -16,10 +16,13 @@ export default function PortfolioRiskSummary({
   metrics,
   numStocks,
   meta,
+  benchmarkName,
 }: {
   metrics: PortfolioRiskMetrics;
   numStocks: number;
   meta: RiskMeta;
+  /** From market_data.json's benchmark entry (backtest/config.py). */
+  benchmarkName: string;
 }) {
   return (
     // Cards ordered so VaR and ES -- the tail-risk pair -- land together in
@@ -49,7 +52,7 @@ export default function PortfolioRiskSummary({
       <StatCard
         label="Beta"
         value={metrics.beta !== null ? metrics.beta.toFixed(2) : "n/a"}
-        caption="vs S&P/TSX Composite"
+        caption={`vs ${benchmarkName}`}
         explanation="How much this moves relative to the market. β=1 moves with the market; β>1 amplifies its swings; β<1 is steadier; β<0 moves opposite."
       />
       <StatCard

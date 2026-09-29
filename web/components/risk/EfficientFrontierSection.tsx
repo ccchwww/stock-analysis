@@ -28,8 +28,8 @@ export default function EfficientFrontierSection({
         of the curve is dominated by some point on it. Two portfolios are
         marked: <span className="text-violet-300">Minimum Variance</span> —
         the single safest combination available, regardless of return — and{" "}
-        <span className="text-amber-300">Maximum Sharpe</span> (the
-        &ldquo;tangency&rdquo; portfolio) — the one with the best return per
+        <span className="text-amber-300">Maximum Sharpe</span>{" "}
+        (the &ldquo;tangency&rdquo; portfolio) — the one with the best return per
         unit of risk. Constraints: long-only (no short positions, every
         weight ≥ 0) and fully invested (weights sum to 100%).
       </p>
