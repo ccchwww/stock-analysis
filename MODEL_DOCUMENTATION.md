@@ -358,8 +358,8 @@ windows** (a specific labeled choice, not a cherry-picked calm sub-period).
   near-term future (no explicit assumption at all, which is itself a
   limitation — see §6).
 - Parametric VaR and Monte Carlo assume i.i.d. Normally-distributed daily
-  returns — contradicted by this project's own measured skewness (−0.19) and
-  excess kurtosis (3.86) on the sample used in §5.
+  returns — contradicted by this project's own measured skewness (−0.13) and
+  excess kurtosis (4.15) on the full-universe sample used in §5.
 - Beta/Alpha assume a linear, stable relationship to the market and a single
   risk factor.
 
@@ -464,81 +464,143 @@ windows** (a specific labeled choice, not a cherry-picked calm sub-period).
 > from current data. Where a *conclusion* depends on a number, the site
 > derives the conclusion too rather than restating one from this document.
 
-Reproduced from `python backtest/validation.py`'s console output against
-the full 51-ticker equal-weight portfolio, full available history
-(2021-08-12 to 2026-08-12, 1255 trading days, 1005 evaluable after the
-250-day warmup). Re-run the command yourself to reproduce these exactly —
-the numbers will drift slightly as the trailing 5-year window rolls forward
-with time.
+All figures below are **as of the 2026-09-28 data vintage**, on the window
+`2021-09-28 → 2026-09-28` (1255 trading days, 1005 evaluable after the
+250-day warm-up). Each table names the selection it was computed on, because
+the answer genuinely differs by selection. Reproduce the full-universe rows
+with `python backtest/validation.py`; the per-preset rows come from the same
+reference functions applied to each preset's equal-weight portfolio.
+
+**The live site is the source of truth.** It recomputes every one of these
+from current data for whatever selection and start date you choose. This
+document is a dated record of what the numbers were when each finding was
+written, kept so the *reasoning* can be audited — not a second source of
+truth to trust over the app.
 
 ### 5.1 VaR backtest — Kupiec (coverage)
 
+Full-universe equal-weight (51 tickers), as of 2026-09-28:
+
 | Method | Confidence | N | Exceptions | Expected | Rate | Kupiec stat | p | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| Historical | 95% | 1005 | 48 | 50.3 | 4.78% | 0.11 | 0.7429 | **pass** |
-| Historical | 99% | 1005 | 8 | 10.1 | 0.80% | 0.45 | 0.5004 | **pass** |
-| Parametric | 95% | 1005 | 45 | 50.3 | 4.48% | 0.60 | 0.4395 | **pass** |
-| Parametric | 99% | 1005 | 13 | 10.1 | 1.29% | 0.80 | 0.3709 | **pass** |
+| Historical | 95% | 1005 | 44 | 50.3 | 4.38% | 0.85 | 0.3558 | **pass** |
+| Historical | 99% | 1005 | 7 | 10.1 | 0.70% | 1.05 | 0.3064 | **pass** |
+| Parametric | 95% | 1005 | 43 | 50.3 | 4.28% | 1.16 | 0.2825 | **pass** |
+| Parametric | 99% | 1005 | 12 | 10.1 | 1.19% | 0.36 | 0.5486 | **pass** |
 
-Coverage (the overall exception rate) looks fine everywhere by this test —
-but see §5.2 and §5.3 for two real problems Kupiec alone doesn't catch.
+Coverage looks fine everywhere on the full universe. It does **not** on the
+two selections the UI actually defaults to — see §5.3, where parametric 99%
+now fails Kupiec outright for both presets.
 
-### 5.2 VaR backtest — Christoffersen (independence): **FAILED in all four cases**
+### 5.2 VaR backtest — Christoffersen (independence): rejects at 95% everywhere, and at 99% only on the full universe
 
-| Method | Confidence | Stat | p | Verdict |
-|---|---|---|---|---|
-| Historical | 95% | 4.76 | 0.0292 | **REJECT** |
-| Historical | 99% | 3.86 | 0.0493 | **REJECT** |
-| Parametric | 95% | 5.90 | 0.0152 | **REJECT** |
-| Parametric | 99% | 6.79 | 0.0092 | **REJECT** |
+**Corrected 2026-09-29.** An earlier version of this section, and of the
+README, claimed the model "fails the Christoffersen test in all four
+method/confidence combinations." That was true of the full-universe
+equal-weight portfolio when it was written, and it is still true of that
+portfolio today — but it was never checked against the selections the site
+actually loads with, and stating it unqualified overclaimed the finding.
+The corrected picture is narrower and more specific.
 
-This is the most important finding in this document. **Every single VaR
-series tested — both methods, both confidence levels — fails the
-independence test at 5% significance.** The overall exception *rate* is
-fine (§5.1), but exceptions are not scattered randomly through time; they
-cluster. In practice this means breaches bunch up during volatile stretches
-(the 2022 rate-hike period is the obvious candidate in this window) rather
-than occurring independently day to day, which is exactly the failure mode
-a rolling-window VaR model with a constant-variance assumption is prone to:
-it reacts to a volatility regime change with a lag, so several exceptions in
-a row happen before the trailing window "catches up." **Conditional
-coverage** (which combines both tests) still passes for historical VaR
-(p = 0.088 / 0.115) because Kupiec's strong pass offsets Christoffersen's
-fail in the combined statistic, but **fails outright for parametric VaR at
-both confidence levels** (p = 0.039 / 0.023) — the combined weight of a
-borderline-elevated rate *and* clustering pushes it over the line.
+**Full-universe equal-weight (51 tickers), as of 2026-09-28** — all four reject:
+
+| Method | Conf. | Exc. | Rate | Kupiec p | Christoffersen p | Cond. coverage p |
+|---|---|---|---|---|---|---|
+| Historical | 95% | 44 | 4.38% | 0.3558 pass | **0.0120 REJECT** | **0.0278 REJECT** |
+| Historical | 99% | 7 | 0.70% | 0.3064 pass | **0.0357 REJECT** | 0.0653 pass |
+| Parametric | 95% | 43 | 4.28% | 0.2825 pass | **0.0094 REJECT** | **0.0192 REJECT** |
+| Parametric | 99% | 12 | 1.19% | 0.5486 pass | **0.0064 REJECT** | **0.0202 REJECT** |
+
+**Sector-Diverse default (RY/ENB/CNR/BCE/ABX)** — the selection the
+Validation tab loads with — as of 2026-09-28:
+
+| Method | Conf. | Exc. | Rate | Kupiec p | Christoffersen p | Cond. coverage p |
+|---|---|---|---|---|---|---|
+| Historical | 95% | 47 | 4.68% | 0.6346 pass | **0.0237 REJECT** | 0.0691 pass |
+| Historical | 99% | 8 | 0.80% | 0.5004 pass | 0.7200 pass | 0.7473 pass |
+| Parametric | 95% | 55 | 5.47% | 0.4980 pass | **0.0344 REJECT** | 0.0849 pass |
+| Parametric | 99% | 21 | 2.09% | **0.0025 REJECT** | 0.0742 pass | **0.0021 REJECT** |
+
+**Big 5 Banks (concentration demo)**, as of 2026-09-28 — the selection the
+home page's headline findings are computed on:
+
+| Method | Conf. | Exc. | Rate | Kupiec p | Christoffersen p | Cond. coverage p |
+|---|---|---|---|---|---|---|
+| Historical | 95% | 56 | 5.57% | 0.4134 pass | **0.0124 REJECT** | **0.0315 REJECT** |
+| Historical | 99% | 11 | 1.09% | 0.7667 pass | 0.6215 pass | 0.8472 pass |
+| Parametric | 95% | 58 | 5.77% | 0.2731 pass | **0.0194 REJECT** | **0.0357 REJECT** |
+| Parametric | 99% | 19 | 1.89% | **0.0115 REJECT** | 0.3682 pass | **0.0274 REJECT** |
+
+**What actually holds, stated precisely.** Clustering is a **95%-level
+phenomenon across every selection tested**: Christoffersen rejects at 5%
+significance in all six 95% series (three selections × two methods), with
+p between 0.0094 and 0.0344. At **99%** the picture has changed as the
+window rolled forward — Christoffersen now *passes* comfortably for both
+five-stock presets (p = 0.72 / 0.37 historical, 0.07 / 0.37 parametric)
+while still rejecting on the full-universe portfolio (p = 0.0357 / 0.0064).
+
+Two honest readings of that, and it is not yet possible to separate them:
+the 99% tail simply has too few exceptions (7 to 21) for the independence
+test to have much power, so a pass there is weak evidence rather than a
+clean bill of health; and a 51-stock equal-weight portfolio is smoother and
+more index-like than a 5-stock one, so a regime shift moves it as a block
+and its breaches bunch harder. The 95% result, where every series has
+40–58 exceptions and every series rejects, is the one carrying real weight.
+
+The mechanism is unchanged and is what a rolling-window model with a
+constant-variance assumption is prone to: it reacts to a volatility regime
+change with a lag, so several breaches land in a row before the trailing
+window catches up. That is the case for GARCH-style conditional volatility
+(§6), and the case is made by the 95% rows, not by the headline the README
+used to carry.
 
 ### 5.3 VaR backtest — the fat-tail finding
 
-Skewness of the tested return series: **−0.19** (mildly left-skewed — a
-longer loss tail, typical for equities). Excess kurtosis: **3.86** (a
-normal distribution has 0 — this sample's tails are far fatter than
-Gaussian). Consistent with that, **parametric VaR at 99% is breached more
-often than its own nominal 1% level** (1.29% observed) **and more often than
-historical VaR at the same confidence** (0.80%) — exactly the expected
-signature of assuming Normal returns when the real distribution has fatter
-tails. Kupiec's test does not flag this specific comparison as significant
-at *this* sample size (n=1005) even though the parametric rate is
-proportionally ~29% too high — worth noting as a real limitation of Kupiec's
-statistical power over a ~4-year sample, not evidence the model is fine.
+**This got sharper, not weaker.** Full-universe equal-weight, as of
+2026-09-28: skewness **−0.13** (mildly left-skewed, a longer loss tail,
+typical for equities), excess kurtosis **4.15** (a normal distribution has
+0 — these tails are far fatter than Gaussian).
+
+On the full universe the signature is directional but not significant:
+parametric VaR at 99% is breached at **1.19%** against its nominal 1%, and
+more often than historical VaR at the same confidence (**0.70%**), yet
+Kupiec does not reject at n = 1005.
+
+On the two five-stock presets it **is** significant, which is new:
+
+| Selection | Parametric 99% rate | Historical 99% rate | Kupiec p (parametric 99%) |
+|---|---|---|---|
+| Sector-Diverse (default) | 2.09% | 0.80% | **0.0025 REJECT** |
+| Big 5 Banks | 1.89% | 1.09% | **0.0115 REJECT** |
+
+Assuming Normal returns breaches the 99% threshold roughly **twice as often
+as it should** on both presets, and that over-breaching is now rejected by
+the coverage test rather than merely visible in the rate. The empirical
+(historical) method, which makes no distributional assumption, stays close
+to nominal on the same data — so this is the Normality assumption failing,
+not the VaR framework failing.
 
 ### 5.4 Basel traffic light
 
 Evaluated on **actual 250-observation windows**, raw counts, never a
 rescaled long-run average (see the correction note below). 99% historical
-VaR, full-universe equal-weight portfolio:
+VaR, as of 2026-09-28:
 
-| Window | Dates | Exceptions | Zone |
+| Selection | Trailing 250 obs. | Worst rolling 250-obs. window | Zones agree? |
 |---|---|---|---|
-| Trailing 250 observations | 2025-08-14 → 2026-08-12 | 0 | **GREEN** |
-| Worst rolling 250-obs window | 2024-04-15 → 2025-04-10 | 4 | **GREEN** |
+| Full-universe equal-weight | 0 → **GREEN** (2025-09-30 → 2026-09-28) | 4 → **GREEN** (2024-04-15 → 2025-04-10) | yes |
+| Sector-Diverse (default) | 1 → **GREEN** | 4 → **GREEN** (2022-10-04 → 2023-10-02) | yes |
+| Big 5 Banks | 4 → **GREEN** (2025-09-30 → 2026-09-28) | 5 → **YELLOW** (2024-04-15 → 2025-04-10) | **no** |
 
-Both land in green here, consistent with §5.1's Kupiec pass at 99%. The two
-figures are reported separately because they can and do diverge for other
-selections — the default sector-diverse selection shown in the UI, for
-instance, produces a green trailing window alongside a **yellow** worst
-window. That divergence *is* the §5.2 clustering finding made visible, and
-the page now states it explicitly when the zones differ.
+The two figures are reported separately precisely because they diverge, and
+as of this vintage it is the **Big 5 Banks** selection that shows it: a
+green trailing window sitting next to a yellow worst window. (An earlier
+version of this section attributed that divergence to the sector-diverse
+default; on current data the default is green on both, and the concentrated
+bank selection is the one that splits.) That divergence *is* §5.2's
+clustering finding made visible — the same exceptions, counted over a
+window that happens to contain the cluster — and the page states it
+explicitly whenever the zones differ.
 
 **Correction (2026-09-20).** An earlier version of this section, and of the
 on-page traffic light, scaled the total exception count over the whole
@@ -597,21 +659,39 @@ stress window and every pre-window lookback**, including the 2008 window's
 3-year lookback from 2005-06-18 — the binding constraint that rules out
 recently-listed TSX 60 names such as `SHOP.TO`.
 
-| Window | Baseline → Stress correlation | Equal-weight return | Benchmark return |
-|---|---|---|---|
-| 2008 GFC | 0.222 → 0.312 (+0.090) | −17.6% | −49.8% |
-| Oil Crash | 0.222 → 0.254 (+0.032) | −5.9% | −21.6% |
-| COVID Crash | 0.222 → 0.590 (+0.368) | −24.6% | −37.1% |
-| 2022 Rate Hikes | 0.222 → 0.297 (+0.075) | −4.6% | −13.6% |
+As of the 2026-09-28 vintage (the stress windows themselves are fixed
+dates, but the benchmark column moved when `BENCHMARK_TICKER` changed —
+see §6):
+
+| Window | Baseline → Stress correlation | Equal-weight | Max-Sharpe | Max-Sharpe − EW | Benchmark (XIU.TO) |
+|---|---|---|---|---|---|
+| 2008 GFC | 0.222 → 0.312 (+0.090) | −17.6% | −22.0% | **−4.4 pts** | −47.6% |
+| Oil Crash | 0.222 → 0.254 (+0.032) | −5.9% | +2.3% | +8.2 pts | −15.9% |
+| COVID Crash | 0.222 → 0.590 (+0.368) | −24.6% | −24.9% | **−0.3 pts** | −35.2% |
+| 2022 Rate Hikes | 0.222 → 0.297 (+0.075) | −4.6% | −6.5% | **−1.9 pts** | −11.7% |
 
 **Correlation rose in all four crises here too** — and proportionally much
 harder than for the banks (COVID: +0.368, versus +0.198 for the already-high
 bank baseline). The "diversification shrinks when you need it" finding is
 therefore *more* visible with a genuinely diversified selection, not less:
 a portfolio averaging 0.22 correlation in calm periods behaved like a 0.59
-one during the COVID crash. Max-Sharpe and min-variance figures for this
-selection are computed client-side (see §2.5) and are not reproduced here,
-since the Python reference check does not re-implement the optimizer.
+one during the COVID crash.
+
+**The "optimal" portfolio lost to the naive one in three of the four
+crises.** Max-Sharpe weights, estimated strictly out-of-sample from the
+three years before each window opens and then held fixed through it,
+underperformed a plain equal-weight blend of the same five stocks in the
+2008 GFC (−4.4 pts), the COVID crash (−0.3 pts) and the 2022 rate-hike
+selloff (−1.9 pts), beating it only in the oil crash (+8.2 pts). This is
+mean-variance's estimation-error sensitivity showing up in real data rather
+than being asserted: the optimizer is fitting a covariance and — far more
+fragile — a mean-return vector from a calm pre-crisis window, then carrying
+those weights into a regime that does not resemble it.
+
+Max-Sharpe and min-variance are computed client-side (see §2.5), since the
+Python reference check does not re-implement the optimizer; the figures
+above are read from the Validation tab's own rendered output for its
+default selection.
 
 ---
 
@@ -619,9 +699,9 @@ since the Python reference check does not re-implement the optimizer.
 
 | Deficiency | Why it matters | Planned remediation |
 |---|---|---|
-| Constant-volatility assumption in parametric VaR and Monte Carlo | §5.3 shows real returns have excess kurtosis of 3.86 — volatility clusters and spikes, it isn't constant | A GARCH(1,1)-style model, letting the variance forecast itself evolve, would likely close most of the parametric-vs-historical VaR gap in §5.3 |
+| Constant-volatility assumption in parametric VaR and Monte Carlo | §5.3 shows real returns have excess kurtosis of 4.15 on the full universe, and parametric 99% VaR over-breaching at roughly twice its nominal rate on both UI presets (Kupiec p = 0.0025 / 0.0115) — volatility clusters and spikes, it isn't constant | A GARCH(1,1)-style model, letting the variance forecast itself evolve, would likely close most of the parametric-vs-historical VaR gap in §5.3 |
 | Single-factor CAPM (Beta/Alpha) | Attributes all systematic risk to one market factor; ignores size, value, momentum, sector effects that are well-documented in the literature | A multi-factor model (Fama-French-style, adapted to Canadian factor data) would decompose alpha more credibly |
-| Christoffersen failure in every VaR series (§5.2) | The current rolling-window approach doesn't adapt fast enough to volatility regime changes, causing exception clustering | Same GARCH remediation above; alternatively, a shorter rolling window trades this off against noisier day-to-day estimates (an explicit tradeoff, not a free fix) |
+| Christoffersen rejects on every 95% VaR series (§5.2) | The rolling window doesn't adapt fast enough to volatility regime changes, so exceptions cluster. Rejects in all six 95% series tested (three selections × two methods, p = 0.0094–0.0344). At 99% it now rejects only on the full-universe portfolio and passes on both five-stock presets — but with 7–21 exceptions there the test has little power, so that pass is weak evidence, not a clean result. **Corrected 2026-09-29:** this row previously read "failure in every VaR series", which overstated a finding that had only ever been checked on the full universe. | Same GARCH remediation above; alternatively, a shorter rolling window trades this off against noisier day-to-day estimates (an explicit tradeoff, not a free fix) |
 | Point-in-time index membership | Survivorship bias throughout (§4) | Would require a licensed, point-in-time constituents dataset — yfinance has no such feature; out of scope for a project built entirely on free data |
 | **Survivorship bias inflates the 12-Month Momentum result specifically** | This is where the bias does the most damage, and it is *not* symmetric across strategies. 12-Month Momentum returns **+192.0%** vs Buy & Hold's **+145.0%** — a **+47.0 pt** headline gap. But the universe is *today's* S&P/TSX 60 constituents applied backwards over 2021–2026, so names dropped from the index are absent entirely. A strategy that ranks and buys past winners is therefore selecting from a pool already filtered for survival, which inflates momentum **more than it inflates Buy & Hold**. Buy & Hold holds the same filtered universe and is biased too, but it does not additionally *select* within it — so the +47.0 pt **gap** is overstated by more than either figure alone, and should not be read as a reliable estimate of edge. The same caveat applies in kind to the other rank-and-select strategies (1-Day Momentum, Mean Reversion), though both lost to the benchmark here so the bias flatters a result that is negative anyway. | **Honestly: this cannot be quantified with the data this project has.** Correcting it requires point-in-time index constituent data — the historical membership of the S&P/TSX 60 at each rebalance date — so that names are in the universe only for the dates they actually belonged to it. yfinance does not provide this, and no free source does; it is a licensed dataset. Until then the magnitude of the overstatement is **unknown, not merely unmeasured**, and the result is reported with the caveat attached directly to the headline (Strategies tab) rather than only in a general limitations footer. |
 | No transaction-cost model on Efficient-Frontier rebalancing | The optimized portfolios in stress testing assume free rebalancing into the estimated weights | Apply the same `COST_BPS` turnover model already used for the five trading strategies |

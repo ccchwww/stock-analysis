@@ -1,10 +1,9 @@
 import { getRiskData } from "@/lib/risk-results";
 import { getMarketData } from "@/lib/market-data-results";
 import RiskDashboard from "@/components/risk/RiskDashboard";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Risk Dashboard",
-};
+export const metadata = pageMetadata("Risk Dashboard");
 
 export default async function RiskDashboardPage() {
   const [riskData, marketData] = await Promise.all([getRiskData(), getMarketData()]);

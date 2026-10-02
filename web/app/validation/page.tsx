@@ -3,10 +3,9 @@ import { getMarketData } from "@/lib/market-data-results";
 import { getStressData } from "@/lib/stress-data-results";
 import { getRiskData } from "@/lib/risk-results";
 import ModelValidationDashboard from "@/components/validation/ModelValidationDashboard";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Model Validation",
-};
+export const metadata = pageMetadata("Model Validation");
 
 export default async function ValidationPage() {
   const [validationData, marketData, stressData, riskData] = await Promise.all([

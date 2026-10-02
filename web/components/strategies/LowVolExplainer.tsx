@@ -1,6 +1,41 @@
 import type { LowVolHoldings } from "@/lib/types";
 import { formatPct } from "@/lib/format";
 
+/** Low-Vol vs the same-universe benchmark on the two numbers the anomaly is
+ *  actually a claim about: risk taken, and return per unit of it. Computed
+ *  upstream from the same rows the risk-adjusted table renders. */
+export type LowVolVerdict = {
+  benchmarkLabel: string;
+  lowVolSharpe: number | null;
+  benchmarkSharpe: number | null;
+  lowVolVolatility: number | null;
+  benchmarkVolatility: number | null;
+};
+
+/** One sentence on whether the anomaly turned up in the window on screen.
+ *  Stated in whichever direction the numbers point -- the interesting case
+ *  here is that it usually does NOT, and saying so is the point. */
+function anomalySentence(v: LowVolVerdict, startDate: string) {
+  const { lowVolSharpe: low, benchmarkSharpe: bench } = v;
+  if (low === null || bench === null) return null;
+
+  const risk =
+    v.lowVolVolatility !== null && v.benchmarkVolatility !== null
+      ? `${formatPct(v.lowVolVolatility)} annualized volatility against ${formatPct(v.benchmarkVolatility)}`
+      : null;
+
+  if (low > bench) {
+    return {
+      holds: true,
+      text: `In the window from ${startDate} the anomaly does show up: Low Volatility's Sharpe of ${low.toFixed(2)} beats ${v.benchmarkLabel}'s ${bench.toFixed(2)}${risk ? `, on ${risk}` : ""} — less risk taken, and more return per unit of it.`,
+    };
+  }
+  return {
+    holds: false,
+    text: `In the window from ${startDate} the anomaly does NOT show up: Low Volatility delivers the lower risk it promises${risk ? ` (${risk})` : ""}, but its Sharpe of ${low.toFixed(2)} is below ${v.benchmarkLabel}'s ${bench.toFixed(2)} — the reduction in return more than paid for the reduction in risk. One five-year window on 51 Canadian large-caps is not a test of a decades-long, cross-market finding; it is simply what this window shows.`,
+  };
+}
+
 // The low-volatility anomaly, its mechanics here, and what specifically is
 // wrong with it — stated on the page rather than assumed known, same as every
 // other feature on this site.
@@ -9,13 +44,18 @@ export default function LowVolExplainer({
   topN,
   minCoverageFraction,
   holdings,
+  startDate,
+  verdict,
 }: {
   lookbackDays: number;
   topN: number;
   minCoverageFraction: number;
   holdings: LowVolHoldings;
+  startDate: string;
+  verdict: LowVolVerdict | null;
 }) {
   const top = holdings.holdings.slice(0, 6);
+  const anomaly = verdict ? anomalySentence(verdict, startDate) : null;
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
@@ -43,6 +83,21 @@ export default function LowVolExplainer({
         rebalance day&rsquo;s own return is not in it, which the backtest asserts on every
         rebalance rather than leaving to a comment.
       </p>
+
+      {anomaly && (
+        <div
+          className={`mt-4 rounded-md border p-3 text-sm leading-relaxed ${
+            anomaly.holds
+              ? "border-emerald-500/30 bg-emerald-500/5 text-zinc-300"
+              : "border-border bg-background/40 text-zinc-400"
+          }`}
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Did it hold here?
+          </p>
+          <p className="mt-1.5">{anomaly.text}</p>
+        </div>
+      )}
 
       {top.length > 0 && (
         <div className="mt-4 rounded-md border border-border bg-background/40 p-3">

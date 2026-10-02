@@ -2,10 +2,9 @@ import { getResults } from "@/lib/results";
 import { getMarketData } from "@/lib/market-data-results";
 import { getRiskData } from "@/lib/risk-results";
 import StrategyExplorer from "@/components/strategies/StrategyExplorer";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata = {
-  title: "Strategies",
-};
+export const metadata = pageMetadata("Strategies");
 
 export default async function StrategiesPage() {
   // risk.json supplies the risk-free rate and annualization convention, so

@@ -25,7 +25,7 @@ import { sliceFromDate } from "@/lib/date-range";
 import { computeDerivedStats, type DerivedStats } from "@/lib/derived-stats";
 import { combineEqualWeight } from "@/lib/returns-math";
 import { computeVerdict, getBestStrategy, isSelectionStrategy } from "@/lib/verdict";
-import { formatSignedPct, toneOf } from "@/lib/format";
+import { formatSignedPct, formatSignedPoints, toneOf } from "@/lib/format";
 import StatCard from "@/components/shared/StatCard";
 import StockMultiSelect, { type SelectableStock } from "@/components/shared/StockMultiSelect";
 import StockPresetButtons from "@/components/shared/StockPresetButtons";
@@ -394,6 +394,22 @@ export default function StrategyExplorer({
 
   const lowVol = strategiesRaw[LOW_VOL_ID];
 
+  // Did the low-volatility anomaly actually show up in the selected window?
+  // Answered from the same risk-adjusted rows the table above renders, so the
+  // explainer can never claim something the table contradicts.
+  const lowVolVerdict = useMemo(() => {
+    const low = riskAdjustedRows.find((r) => r.id === LOW_VOL_ID);
+    const bench = riskAdjustedRows.find((r) => r.id === BENCHMARK_ID);
+    if (!low || !bench) return null;
+    return {
+      benchmarkLabel: strategiesRaw[BENCHMARK_ID]?.label ?? "Buy & Hold",
+      lowVolSharpe: low.sharpe,
+      benchmarkSharpe: bench.sharpe,
+      lowVolVolatility: low.volatility,
+      benchmarkVolatility: bench.volatility,
+    };
+  }, [riskAdjustedRows, strategiesRaw]);
+
   return (
     <div className="flex flex-col gap-8">
       <div className="rounded-lg border border-border bg-surface p-4">
@@ -460,11 +476,13 @@ export default function StrategyExplorer({
               : "insufficient data in window"
           }
         />
+        {/* Percentage POINTS, not percent: this is the gap between two total
+            returns, and "%" would read as a relative change. */}
         <StatCard
           label="Best Active vs Benchmark"
-          value={edgeVsBenchmark != null ? formatSignedPct(edgeVsBenchmark, 1) : "n/a"}
+          value={edgeVsBenchmark != null ? formatSignedPoints(edgeVsBenchmark, 1) : "n/a"}
           tone={edgeVsBenchmark != null ? toneOf(edgeVsBenchmark) : "neutral"}
-          caption="percentage points, total return, net of costs"
+          caption="total return gap, net of costs"
           explanation={
             bestActive && isSelectionStrategy(bestActive.id)
               ? "Not a reliable estimate of edge. Survivorship bias inflates a selection strategy more than it inflates Buy & Hold, so this gap is overstated by an unknown amount."
@@ -529,6 +547,8 @@ export default function StrategyExplorer({
           topN={resultsMeta.top_n}
           minCoverageFraction={resultsMeta.low_vol_min_coverage_fraction}
           holdings={resultsMeta.low_vol_holdings}
+          startDate={startDate}
+          verdict={lowVolVerdict}
         />
       )}
 
