@@ -313,8 +313,8 @@ closed-form cross-checks run by hand during development.
 
 ## Author
 
-TODO: Your Name — [LinkedIn](TODO: https://www.linkedin.com/in/your-handle/)
-· [GitHub](https://github.com/ccchwww) · TODO: your.email@example.com
+Xi Wan — [LinkedIn](https://www.linkedin.com/in/xi-wan-89aa99239/?isSelfProfile=true)
+· [GitHub](https://github.com/ccchwww) 
 
 <!-- The deployed origin, referenced as [live] everywhere above. Renaming the
      Vercel domain is a one-line change here. The app keeps the same value in
