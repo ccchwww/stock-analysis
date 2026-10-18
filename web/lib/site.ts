@@ -19,11 +19,10 @@ export const SITE_URL = "https://stock-analysis-ten-ecru.vercel.app";
 export const REPO_URL = "https://github.com/ccchwww/stock-analysis";
 export const MODEL_DOC_URL = `${REPO_URL}/blob/main/MODEL_DOCUMENTATION.md`;
 
-// TODO: fill these in.
 export const AUTHOR = {
-  name: "TODO: Your Name",
+  name: "Chris Wan",
   github: "https://github.com/ccchwww",
-  linkedin: "TODO: https://www.linkedin.com/in/your-handle/",
+  linkedin: "https://www.linkedin.com/in/xi-wan-89aa99239",
 } as const;
 
 /**
