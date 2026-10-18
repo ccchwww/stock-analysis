@@ -313,7 +313,7 @@ closed-form cross-checks run by hand during development.
 
 ## Author
 
-TODO: Your Name — [LinkedIn](TODO: https://www.linkedin.com/in/your-handle/)
+Chris Wan — [LinkedIn](https://www.linkedin.com/in/xi-wan-89aa99239)
 · [GitHub](https://github.com/ccchwww) · TODO: your.email@example.com
 
 <!-- The deployed origin, referenced as [live] everywhere above. Renaming the
